@@ -1,0 +1,14 @@
+[project]
+name = "ncpages-docs"
+version = "0.0.0"
+description = "Documentation site for ncpages, built with Zensical"
+requires-python = ">=3.13"
+dependencies = [
+    "zensical>=0.0.38",
+]
+
+[tool.uv]
+# This project is only a dependency manifest for the documentation build.
+# There is nothing to install from this directory itself.
+package = false
+required-version = ">=0.11.7"

@@ -1,0 +1,136 @@
+# Documentation site for ncpages.
+#
+# The source is the OKF knowledge bundle in knowledge/ — there is no second copy
+# of the documentation to keep in sync. Built by .github/workflows/docs.yml and
+# published to GitHub Pages.
+#
+# Note: this file configures *this repository's documentation site*. It is not an
+# ncpages configuration; ncpages itself is generator-agnostic and is configured
+# through ncpages.toml plus hook scripts.
+
+[project]
+site_name = "ncpages"
+site_description = "Watch a Nextcloud folder, build a static site when it changes, publish it atomically."
+site_author = "Peter Heiss"
+site_url = "https://heiss.github.io/ncpages/"
+repo_url = "https://github.com/Heiss/ncpages"
+repo_name = "Heiss/ncpages"
+
+docs_dir = "knowledge"
+site_dir = "site"
+
+copyright = """
+Copyright &copy; 2026 <a href="https://github.com/Heiss" rel="me">Peter Heiss</a> &middot;
+Apache-2.0 &middot; not affiliated with Nextcloud GmbH
+"""
+
+nav = [
+  "index.md",
+  { "Overview" = "overview.md" },
+  { "Glossary" = "glossary.md" },
+  { "Architecture" = [
+    "architecture/index.md",
+    { "Pipeline" = "architecture/pipeline.md" },
+    { "Scheduler state machine" = "architecture/state-machine.md" },
+    { "Topology" = "architecture/topology.md" },
+    { "Security model" = "architecture/security-model.md" },
+    { "Delivery" = "architecture/delivery.md" },
+    { "Build environment" = "architecture/build-environment.md" },
+  ] },
+  { "Interfaces" = [
+    "interfaces/index.md",
+    { "Configuration" = "interfaces/configuration.md" },
+    { "Hook contract" = "interfaces/hook-contract.md" },
+    { "Quality gate" = "interfaces/quality-gate.md" },
+    { "Observability" = "interfaces/observability.md" },
+    { "Builder API" = "interfaces/builder-api.md" },
+  ] },
+  { "Decisions" = [
+    "decisions/index.md",
+    { "WebDAV over inotify" = "decisions/webdav-over-inotify.md" },
+    { "notify_push over webhook_listeners" = "decisions/notify-push-over-webhook-listeners.md" },
+    { "Trigger composition" = "decisions/trigger-composition.md" },
+    { "queue_latest over cancel" = "decisions/queue-latest-over-cancel.md" },
+    { "Code outside the vault" = "decisions/code-outside-vault.md" },
+    { "Watcher/builder split" = "decisions/watcher-builder-split.md" },
+    { "Baked dependencies" = "decisions/baked-dependencies.md" },
+    { "Navigation from frontmatter" = "decisions/navigation-from-frontmatter.md" },
+    { "Hooks, not plugins" = "decisions/hooks-not-plugins.md" },
+    { "Self-hosted delivery" = "decisions/self-hosted-delivery.md" },
+    { "One binary with roles" = "decisions/single-binary-roles.md" },
+    { "Symlink swap" = "decisions/symlink-swap-publish.md" },
+    { "External bridge network" = "decisions/external-bridge-network.md" },
+    { "Source as working copy" = "decisions/source-as-working-copy.md" },
+  ] },
+  { "Recipes" = [
+    "recipes/index.md",
+    { "Zensical + Obsidian" = "recipes/zensical-obsidian.md" },
+    { "Navigation convention" = "recipes/nav-frontmatter-convention.md" },
+  ] },
+  { "Operations" = [
+    "operations/index.md",
+    { "Cutover runbook" = "operations/cutover-runbook.md" },
+    { "Failure modes" = "operations/failure-modes.md" },
+    { "Doctor checks" = "operations/doctor-checks.md" },
+  ] },
+  { "History" = [
+    "history/index.md",
+    { "Design narrative" = "history/design-narrative.md" },
+    { "Audit of the current setup" = "history/current-setup-audit.md" },
+    { "Legacy workflow findings" = "history/legacy-workflow-findings.md" },
+    { "Design session transcript (de)" = "history/design-session-transcript.md" },
+    { "Original concept note (de)" = "history/original-concept-note.md" },
+  ] },
+  { "Open questions" = "open-questions.md" },
+  { "Roadmap" = "roadmap.md" },
+  { "Bundle update log" = "log.md" },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.code.copy",
+  "content.footnote.tooltips",
+  "content.tooltips",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.instant.progress",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  "toc.follow",
+]
+
+[project.theme.font]
+text = "Inter"
+code = "Jetbrains Mono"
+
+[[project.theme.palette]]
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[project.markdown_extensions.abbr]
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.footnotes]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.tables]
+[project.markdown_extensions.toc]
+permalink = true
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.superfences]
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true

@@ -2,6 +2,10 @@
 
 ## 2026-08-15
 
+* **Update**: This bundle is now the source of the published documentation site.
+  Zensical builds it directly (`docs_dir = "knowledge"`) and GitHub Actions
+  deploys it to GitHub Pages; `tools/check_bundle.py` gates the build on OKF
+  conformance and link integrity.
 * **Update**: Implementation choices recorded — Rust, repository
   `github.com/Heiss/ncpages` (public, Apache-2.0), and
   [One binary with roles](decisions/single-binary-roles.md), which moves serving

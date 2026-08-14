@@ -14,6 +14,30 @@ supply.
 > [OKF v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
 > bundle. Start at [`knowledge/overview.md`](knowledge/overview.md).
 
+**Documentation: <https://heiss.github.io/ncpages/>** — built with Zensical
+directly from `knowledge/`, so the published documentation and the bundle in this
+repository are the same files. `tools/check_bundle.py` enforces OKF conformance and
+link integrity in CI.
+
+## Bring your own generator
+
+ncpages does not know what a site generator is. It syncs, assembles, gates,
+publishes and serves; *what* runs in between is a script you configure:
+
+```toml
+[[hooks.pre_build]]
+run = "nav_from_frontmatter.py"
+
+[[hooks.post_publish]]
+run = "send_webmentions.sh"
+```
+
+Four phases — `pre_build`, `build`, `post_build`, `post_publish` — each with a
+fixed environment contract and three meaningful exit codes. No plugin API, no
+dynamic modules: programs and environment variables, an interface that still works
+in five years. Zensical, Quartz, Hugo and mkdocs-material are recipes, not
+features.
+
 ## What it does
 
 ```

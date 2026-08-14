@@ -53,7 +53,7 @@ The only abstraction v1 needs is **core versus recipe**.
 Not automatic — a tool in someone else's publishing path carries obligations. What
 it would require:
 
-**Decide the name first.** See [Open questions](open-questions.md#5--the-name).
+**Decide the name first.** See [Open questions](open-questions.md#7-the-name).
 Renaming after release costs image tags, documentation links and stars.
 
 **License Apache-2.0.** No Nextcloud code is linked; communication is plain HTTP,
@@ -81,10 +81,17 @@ halves the reachable user base.
 **Integration tests against real Nextcloud versions**, as a compose matrix. The
 failure modes are deployment-shaped, so unit tests cannot find them.
 
-**A documentation site on GitHub Pages**, built by GitHub Actions. Explicitly *not*
-built by ncpages: the documentation lives in git, not in a Nextcloud folder, so
-ncpages is the wrong tool for it. Dogfooding here would mean inventing a
-requirement to satisfy a slogan.
+**A documentation site on GitHub Pages**, built by GitHub Actions with Zensical
+straight from this bundle (`docs_dir = "knowledge"`), so there is no second copy of
+the documentation to keep in sync. Explicitly *not* built by ncpages: the
+documentation lives in git, not in a Nextcloud folder, so ncpages is the wrong tool
+for it. Dogfooding here would mean inventing a requirement to satisfy a slogan.
+
+That Zensical is also the reference recipe's generator is a convenience, not a
+coupling — the ncpages core has no knowledge of it. Which generator runs is decided
+entirely by the recipe's hooks and builder image; see
+[Hooks, not plugins](decisions/hooks-not-plugins.md) and
+[Recipes](recipes/index.md).
 
 **An honest README.** The comparison with `watchexec` plus a shell script, stated
 plainly, and one sentence about maintenance expectations and bus factor. A tool in
