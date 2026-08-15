@@ -182,6 +182,80 @@ async fn conflict_copies_are_excluded_from_the_build_and_reported() {
 }
 
 #[tokio::test]
+async fn a_public_share_link_is_a_complete_credential() {
+    // The smallest possible setup: no account, no app password, just a share
+    // token. The share is read-only by nature, which matches what ncpages needs.
+    let mock = MockNextcloud::start(&[("a.md", "one"), ("sub/b.md", "two")]).await;
+    let work = workdir();
+    let config = mock.share_config(work.path());
+    let source = Source::from_config(&config).unwrap();
+    let mut state = State::default();
+
+    let report = source.sync(&config.paths.src, &mut state).await.unwrap();
+
+    assert_eq!(report.downloaded, 2);
+    assert_eq!(
+        std::fs::read_to_string(config.paths.src.join("sub/b.md")).unwrap(),
+        "two"
+    );
+
+    let listing = mock
+        .requests()
+        .into_iter()
+        .find(|r| r.method == "PROPFIND")
+        .unwrap();
+    assert!(
+        listing.path.starts_with("/public.php/dav/files/"),
+        "a share must use the public endpoint, got {}",
+        listing.path
+    );
+}
+
+#[tokio::test]
+async fn an_unchanged_share_also_costs_exactly_one_request() {
+    let mock = MockNextcloud::start(&[("a.md", "one")]).await;
+    let work = workdir();
+    let config = mock.share_config(work.path());
+    let source = Source::from_config(&config).unwrap();
+    let mut state = State::default();
+
+    source.sync(&config.paths.src, &mut state).await.unwrap();
+    mock.reset_requests();
+    source.sync(&config.paths.src, &mut state).await.unwrap();
+
+    assert_eq!(mock.requests().len(), 1, "{:?}", mock.requests());
+}
+
+#[tokio::test]
+async fn a_hostile_server_cannot_write_outside_the_working_copy() {
+    // A compromised or malicious server can put anything in an href. Joining it
+    // onto the destination unchecked would let it write anywhere this process
+    // can reach.
+    let mock = MockNextcloud::start(&[("a.md", "one")]).await;
+    mock.poison_listing_with("../escaped.md");
+
+    let work = workdir();
+    let config = mock.config(work.path());
+    let source = Source::from_config(&config).unwrap();
+    let mut state = State::default();
+
+    let report = source.sync(&config.paths.src, &mut state).await.unwrap();
+
+    assert_eq!(
+        report.downloaded, 1,
+        "only the legitimate file may be fetched"
+    );
+    assert!(
+        !work.path().join("escaped.md").exists(),
+        "a crafted href escaped the working copy"
+    );
+    assert!(
+        config.paths.src.join("a.md").exists(),
+        "the sync must still work"
+    );
+}
+
+#[tokio::test]
 async fn unauthorized_stops_immediately_rather_than_retrying() {
     let mock = MockNextcloud::start(&[("a.md", "one")]).await;
     mock.set_mode(Mode::Unauthorized);

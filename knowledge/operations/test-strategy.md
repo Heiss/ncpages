@@ -57,6 +57,16 @@ stops immediately rather than retrying into brute-force protection, `503` is
 reported as maintenance mode — and records the `Host` header, because
 `server_name` matching and `trusted_domains` depend on it.
 
+It can also play a hostile server: `poison_listing_with("../escaped.md")` injects
+an `href` that escapes the destination, and serves content for it, so a missing
+traversal guard results in a file landing outside the working copy rather than a
+convenient 404. That test was checked the only way such a test is worth anything
+— by removing the guard and watching it fail.
+
+Both endpoints are covered: the account one and the public share
+(`/public.php/dav/files/{token}`), including the assertion that an unchanged share
+also costs exactly one request.
+
 # What only the end-to-end layer can prove
 
 * **ETag propagation is real**, not just faithfully mocked. If a future Nextcloud

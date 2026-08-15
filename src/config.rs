@@ -63,11 +63,20 @@ pub struct Source {
     #[serde(default)]
     pub host_header: Option<String>,
     /// Remote path below the user's files root, or a local path for `fs`.
+    /// For a share, a path inside the shared folder; usually empty.
     pub path: String,
     #[serde(default)]
     pub user: Option<String>,
     #[serde(default)]
     pub password_file: Option<PathBuf>,
+    /// Token of a public share link, used instead of an account. The smallest
+    /// possible setup: no account credential leaves Nextcloud, and the share can
+    /// be revoked without touching anything else.
+    #[serde(default)]
+    pub share_token: Option<String>,
+    /// Only for a password-protected share.
+    #[serde(default)]
+    pub share_password_file: Option<PathBuf>,
     /// Refuse to start when the source is unreachable. Off by default: the
     /// working copy is persistent, so an unreachable source degrades rather
     /// than stops the service.
@@ -502,10 +511,22 @@ impl Config {
                 if self.source.url.is_none() {
                     bail!("source.url is required for kind = \"webdav\"");
                 }
-                if self.source.user.is_none() || self.source.password_file.is_none() {
-                    bail!(
-                        "source.user and source.password_file are required for kind = \"webdav\""
-                    );
+                let account = self.source.user.is_some() || self.source.password_file.is_some();
+                let share = self.source.share_token.is_some();
+                match (account, share) {
+                    (true, true) => bail!(
+                        "source has both an account (user/password_file) and a share_token; pick one"
+                    ),
+                    (false, false) => bail!(
+                        "kind = \"webdav\" needs either source.user with source.password_file, \
+                         or source.share_token for a public share link"
+                    ),
+                    (true, false) if self.source.user.is_none()
+                        || self.source.password_file.is_none() =>
+                    {
+                        bail!("source.user and source.password_file must be given together")
+                    }
+                    _ => {}
                 }
             }
             SourceKind::Fs => {}
@@ -534,6 +555,10 @@ impl Config {
     /// Secrets are read from files, never taken from inline config values.
     pub fn source_password(&self) -> Result<Option<String>> {
         read_secret(self.source.password_file.as_deref())
+    }
+
+    pub fn share_password(&self) -> Result<Option<String>> {
+        read_secret(self.source.share_password_file.as_deref())
     }
 
     pub fn build_token(&self) -> Result<Option<String>> {

@@ -12,6 +12,7 @@ use std::time::Duration;
 use anyhow::{anyhow, bail, Context, Result};
 use percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, CONTROLS};
 use reqwest::{Method, StatusCode};
+use tracing::warn;
 
 use crate::config::{Config, SourceKind};
 use crate::fsutil;
@@ -124,13 +125,27 @@ impl Fs {
 
 pub struct Webdav {
     client: reqwest::Client,
-    /// `{url}/remote.php/dav/files/{user}`
+    /// `{url}/remote.php/dav/files/{user}` for an account, or
+    /// `{url}/public.php/dav/files/{token}` for a public share.
     base: String,
-    /// Remote path below the user's files root.
+    /// Remote path below that root.
     path: String,
     host_header: Option<String>,
-    user: String,
-    password: String,
+    auth: Auth,
+}
+
+/// Two ways in. A share link is the smaller one: no account credential leaves
+/// Nextcloud, the share is read-only by nature, and revoking it is one click.
+pub enum Auth {
+    Account {
+        user: String,
+        password: String,
+    },
+    /// Anonymous unless the share is password-protected, in which case Nextcloud
+    /// expects the literal username `anonymous`.
+    Share {
+        password: Option<String>,
+    },
 }
 
 #[derive(Debug)]
@@ -149,47 +164,73 @@ impl Webdav {
             .ok_or_else(|| anyhow!("source.url is required"))?
             .trim_end_matches('/')
             .to_string();
-        let user = config
-            .source
-            .user
-            .clone()
-            .ok_or_else(|| anyhow!("source.user is required"))?;
-        let password = config
-            .source_password()?
-            .ok_or_else(|| anyhow!("source.password_file is required"))?;
+        let (base, auth) = match &config.source.share_token {
+            Some(token) => (
+                format!("{url}/public.php/dav/files/{token}"),
+                Auth::Share {
+                    password: config.share_password()?,
+                },
+            ),
+            None => {
+                let user = config
+                    .source
+                    .user
+                    .clone()
+                    .ok_or_else(|| anyhow!("source.user is required"))?;
+                let password = config
+                    .source_password()?
+                    .ok_or_else(|| anyhow!("source.password_file is required"))?;
+                (
+                    format!("{url}/remote.php/dav/files/{user}"),
+                    Auth::Account { user, password },
+                )
+            }
+        };
 
         Ok(Self {
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(60))
                 .build()
                 .context("building HTTP client")?,
-            base: format!("{url}/remote.php/dav/files/{user}"),
+            base,
             path: config.source.path.trim_matches('/').to_string(),
             host_header: config.source.host_header.clone(),
-            user,
-            password,
+            auth,
         })
     }
 
+    /// Join base, watched path and a relative entry, percent-encoding each
+    /// segment but not the separators. Empty segments are dropped, so a share
+    /// whose watched path is the share root does not produce a double slash.
     fn url_for(&self, rel: &str) -> String {
-        let mut path = self.path.clone();
-        if !rel.is_empty() {
-            path.push('/');
-            path.push_str(rel);
-        }
-        let encoded: String = path
+        let encoded: Vec<String> = self
+            .path
             .split('/')
+            .chain(rel.split('/'))
+            .filter(|segment| !segment.is_empty())
             .map(|segment| utf8_percent_encode(segment, PATH_SET).to_string())
-            .collect::<Vec<_>>()
-            .join("/");
-        format!("{}/{}", self.base, encoded)
+            .collect();
+
+        if encoded.is_empty() {
+            self.base.clone()
+        } else {
+            format!("{}/{}", self.base, encoded.join("/"))
+        }
     }
 
     fn request(&self, method: Method, url: &str) -> reqwest::RequestBuilder {
-        let mut builder = self
-            .client
-            .request(method, url)
-            .basic_auth(&self.user, Some(&self.password));
+        let mut builder = self.client.request(method, url);
+        builder = match &self.auth {
+            Auth::Account { user, password } => builder.basic_auth(user, Some(password)),
+            Auth::Share {
+                password: Some(password),
+            } => builder.basic_auth("anonymous", Some(password)),
+            Auth::Share { password: None } => builder,
+        };
+        // Nextcloud answers 401 to non-GET requests against /public.php/dav
+        // without this, unless server-to-server sharing happens to be enabled.
+        // Harmless on the account endpoint, so it is sent unconditionally.
+        builder = builder.header("X-Requested-With", "XMLHttpRequest");
         // Internally we speak to the HTTP frontend by service name; the real
         // domain still has to appear in Host: for server_name matching and
         // trusted_domains to work.
@@ -242,6 +283,13 @@ impl Webdav {
             for entry in self.propfind(&dir, 1).await? {
                 if entry.rel == dir {
                     continue; // the collection itself
+                }
+                // The path comes from a server-controlled href. A hostile or
+                // compromised server could return one that decodes to `../..`
+                // and write outside the working copy.
+                if !is_safe_relative(&entry.rel) {
+                    warn!(path = %entry.rel, "ignoring a remote path that escapes the working copy");
+                    continue;
                 }
                 if entry.is_dir {
                     queue.push(entry.rel);
@@ -305,6 +353,21 @@ impl Webdav {
         report.changed = report.downloaded > 0 || report.deleted > 0;
         Ok(report)
     }
+}
+
+/// Whether a server-supplied path may be joined onto a local directory.
+///
+/// A legitimate entry never contains a `..` segment, a leading slash, a
+/// backslash or a drive letter. Without this check, one crafted `href` in a
+/// PROPFIND response writes anywhere the process can reach.
+fn is_safe_relative(rel: &str) -> bool {
+    if rel.is_empty() || rel.starts_with('/') || rel.contains('\\') {
+        return false;
+    }
+    if rel.len() >= 2 && rel.as_bytes()[1] == b':' {
+        return false;
+    }
+    !rel.split('/').any(|segment| segment == "..")
 }
 
 fn check_status(status: StatusCode, url: &str) -> Result<()> {
@@ -444,14 +507,86 @@ mod tests {
             base: "http://nginx/remote.php/dav/files/publisher".into(),
             path: config.source.path.clone(),
             host_header: None,
-            user: "publisher".into(),
-            password: "x".into(),
+            auth: Auth::Account {
+                user: "publisher".into(),
+                password: "x".into(),
+            },
         };
         assert_eq!(
             dav.url_for("Über Bäume.md"),
             "http://nginx/remote.php/dav/files/publisher/Notizen/Mein%20Blog/%C3%9Cber%20B%C3%A4ume.md",
             "path segments must be percent-encoded, separators must not"
         );
+    }
+
+    #[test]
+    fn a_share_token_selects_the_public_endpoint() {
+        let dir = tempfile::tempdir().unwrap();
+        let config: Config = toml::from_str(&format!(
+            r#"
+            schema_version = 1
+            [source]
+            kind = "webdav"
+            url = "https://cloud.example.org"
+            path = ""
+            share_token = "abc123XYZ"
+            [build]
+            kind = "local"
+            command = ["true"]
+            [paths]
+            src = "{d}/src"
+            build = "{d}/build"
+            state = "{d}/state"
+            config_dir = "{d}/etc"
+            "#,
+            d = dir.path().display()
+        ))
+        .unwrap();
+        config
+            .validate()
+            .expect("a share token is a complete credential");
+
+        let dav = Webdav::new(&config).unwrap();
+        assert_eq!(
+            dav.url_for("note.md"),
+            "https://cloud.example.org/public.php/dav/files/abc123XYZ/note.md"
+        );
+        assert!(matches!(dav.auth, Auth::Share { password: None }));
+    }
+
+    #[test]
+    fn an_account_and_a_share_token_together_are_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let secret = dir.path().join("pw");
+        std::fs::write(&secret, "x").unwrap();
+        let config: Config = toml::from_str(&format!(
+            r#"
+            schema_version = 1
+            [source]
+            kind = "webdav"
+            url = "https://cloud.example.org"
+            path = "Notes"
+            user = "publisher"
+            password_file = "{secret}"
+            share_token = "abc123"
+            "#,
+            secret = secret.display()
+        ))
+        .unwrap();
+        let err = config.validate().unwrap_err().to_string();
+        assert!(err.contains("pick one"), "{err}");
+    }
+
+    #[test]
+    fn server_supplied_paths_that_escape_the_working_copy_are_rejected() {
+        assert!(is_safe_relative("notes/a.md"));
+        assert!(is_safe_relative("Über Bäume.md"));
+
+        assert!(!is_safe_relative("../outside.md"));
+        assert!(!is_safe_relative("a/../../etc/cron.d/evil"));
+        assert!(!is_safe_relative("/etc/passwd"));
+        assert!(!is_safe_relative("C:\\Windows\\system32"));
+        assert!(!is_safe_relative(""));
     }
 
     #[test]

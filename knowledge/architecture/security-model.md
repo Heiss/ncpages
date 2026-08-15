@@ -106,6 +106,23 @@ root ETag is path-blind: it changes for *any* descendant.
 Status reporting therefore leaves through a channel of its own. See
 [Status reporting](../interfaces/status-reporting.md).
 
+# The source is not trusted either
+
+The vault is treated as hostile content, and so is the server serving it. Two
+consequences in the sync path:
+
+**Paths from the server are validated before they touch the filesystem.** A
+`PROPFIND` response contains `href` values chosen by the server; one that decodes
+to `../../etc/…` would, joined onto the destination unchecked, write wherever the
+process can reach. Entries with `..` segments, absolute paths, backslashes or
+drive letters are dropped and logged. There is a test that fails when the check is
+removed.
+
+**A share link is the least privilege that works.** Where an account credential
+grants read *and write* to everything that account can see, a public share is
+read-only by construction and revocable in one click. See
+[Configuration](../interfaces/configuration.md).
+
 # Supply chain
 
 Every binary fetched into the builder image is pinned by version **and** sha256, at

@@ -36,9 +36,16 @@ kind          = "webdav"                  # webdav | fs
 url           = "http://nginx"            # the HTTP frontend, never the FPM container
 host_header   = "cloud.example.org"       # real domain, for server_name/trusted_domains
 path          = "Notes/blog"
+required      = false                     # start even if the source is unreachable
+
+# Either an account …
 user          = "publisher"
 password_file = "/run/secrets/nc_app_password"
-required      = false                     # start even if the source is unreachable
+
+# … or a public share link, which needs no account at all:
+# share_token         = "abc123XYZ"       # the id from the share URL
+# share_password_file = "/run/secrets/share_password"   # only if the share has one
+# path                = ""                # a folder inside the share, usually empty
 
 [paths]
 src        = "/work/src"                  # vault working copy
@@ -127,6 +134,17 @@ leave a published state whose irreversible `post_publish` effects half-fired.
 is nginx — the FPM container speaks FastCGI, and pointing at it produces errors
 that look like authentication failures.
 
+**`source.share_token` is an alternative to an account**, not an addition — giving
+both is refused. It uses Nextcloud's public share endpoint
+(`/public.php/dav/files/{token}`, Nextcloud 29 and later) and is the smallest
+setup there is: no account credential leaves Nextcloud, the share is read-only by
+nature, and revoking it is one click in the web UI. A password-protected share
+authenticates as the literal user `anonymous` with the share password.
+
+Requests carry `X-Requested-With: XMLHttpRequest`, which the public endpoint
+requires for anything that is not a GET; without it Nextcloud answers 401 and the
+cause is not obvious.
+
 **`source.host_header`** exists because the internal URL is not the public one.
 
 **`source.required = false`** is the default posture: the working copy is
@@ -157,7 +175,7 @@ through explicit `env_passthrough`. The builder receives none of them.
 
 | Section | State |
 |---|---|
-| `source` (`webdav`, `fs`), `paths`, `assemble`, `build`, `gate`, `publish`, `serve`, `health` | implemented |
+| `source` (`webdav` with an account or a share token, `fs`), `paths`, `assemble`, `build`, `gate`, `publish`, `serve`, `health` | implemented |
 | `triggers.push` (notify_push), `triggers.poll`, `triggers.timer`, `triggers.jitter`, `schedule` | implemented |
 | `hooks.*` with the four-phase contract | implemented |
 | `report.ntfy_topic` | implemented for failures, gate refusals and conflict copies |

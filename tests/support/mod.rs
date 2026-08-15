@@ -35,6 +35,8 @@ const PATH_SET: &AsciiSet = &CONTROLS
 
 pub const USER: &str = "publisher";
 pub const ROOT: &str = "Notes/blog";
+/// Token of the public share the mock also answers on.
+pub const SHARE_TOKEN: &str = "shareXYZ";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -57,6 +59,9 @@ struct Inner {
     files: BTreeMap<String, String>,
     requests: Vec<RecordedRequest>,
     mode: Option<Mode>,
+    /// A raw href injected into every Depth:1 listing, to play the part of a
+    /// hostile or compromised server.
+    poison: Option<String>,
 }
 
 #[derive(Clone)]
@@ -78,6 +83,7 @@ impl MockNextcloud {
                 .collect(),
             requests: Vec::new(),
             mode: Some(Mode::Ok),
+            poison: None,
         }));
 
         let app = Router::new()
@@ -108,6 +114,11 @@ impl MockNextcloud {
 
     pub fn delete(&self, path: &str) {
         self.inner.lock().unwrap().files.remove(path);
+    }
+
+    /// Make the server answer with a path that escapes the working copy.
+    pub fn poison_listing_with(&self, href: &str) {
+        self.inner.lock().unwrap().poison = Some(href.to_string());
     }
 
     pub fn set_mode(&self, mode: Mode) {
@@ -169,6 +180,41 @@ impl MockNextcloud {
     }
 }
 
+impl MockNextcloud {
+    /// The same content, reached through a public share link instead of an
+    /// account: no user, no password, just the token.
+    pub fn share_config(&self, workdir: &Path) -> Config {
+        let toml = format!(
+            r#"
+            schema_version = 1
+
+            [source]
+            kind = "webdav"
+            url = "{url}"
+            path = ""
+            share_token = "{token}"
+
+            [paths]
+            src = "{work}/src"
+            build = "{work}/build"
+            state = "{work}/state"
+            config_dir = "{work}/etc"
+
+            [build]
+            kind = "local"
+            command = ["true"]
+
+            [publish]
+            root = "{work}/publish"
+            "#,
+            url = self.url,
+            token = SHARE_TOKEN,
+            work = workdir.display(),
+        );
+        toml::from_str(&toml).expect("share config parses")
+    }
+}
+
 async fn handle(
     State(state): State<AppState>,
     method: Method,
@@ -206,8 +252,14 @@ async fn handle(
         }
     }
 
-    let prefix = format!("/remote.php/dav/files/{USER}/{ROOT}");
-    let Some(rel) = path.strip_prefix(&prefix) else {
+    // The mock answers on both endpoints: the account one and the public share.
+    let account = format!("/remote.php/dav/files/{USER}/{ROOT}");
+    let share = format!("/public.php/dav/files/{SHARE_TOKEN}");
+    let (prefix, rel) = if let Some(rel) = path.strip_prefix(&account) {
+        (account.clone(), rel)
+    } else if let Some(rel) = path.strip_prefix(&share) {
+        (share.clone(), rel)
+    } else {
         return (StatusCode::NOT_FOUND, "outside the watched root").into_response();
     };
     let rel = rel.trim_matches('/').to_string();
@@ -220,10 +272,16 @@ async fn handle(
             .and_then(|v| v.to_str().ok())
             .unwrap_or("0")
             .to_string();
-        return multistatus(&files, &rel, &depth);
+        let poison = state.0.lock().unwrap().poison.clone();
+        return multistatus(&files, &rel, &depth, poison.as_deref(), &prefix);
     }
 
     if method == Method::GET {
+        // Serve the poisoned path too, so a missing traversal guard results in a
+        // file actually landing outside the destination rather than a 404.
+        if state.0.lock().unwrap().poison.as_deref() == Some(rel.as_str()) {
+            return (StatusCode::OK, "escaped!").into_response();
+        }
         return match files.get(&rel) {
             Some(body) => (StatusCode::OK, body.clone()).into_response(),
             None => (StatusCode::NOT_FOUND, "no such file").into_response(),
@@ -233,14 +291,20 @@ async fn handle(
     (StatusCode::METHOD_NOT_ALLOWED, "unsupported").into_response()
 }
 
-fn multistatus(files: &BTreeMap<String, String>, target: &str, depth: &str) -> Response {
+fn multistatus(
+    files: &BTreeMap<String, String>,
+    target: &str,
+    depth: &str,
+    poison: Option<&str>,
+    prefix: &str,
+) -> Response {
     let is_dir = target.is_empty() || files.keys().any(|p| p.starts_with(&format!("{target}/")));
     if !is_dir && !files.contains_key(target) {
         return (StatusCode::NOT_FOUND, "no such collection").into_response();
     }
 
     let mut body = String::from(r#"<?xml version="1.0"?><d:multistatus xmlns:d="DAV:">"#);
-    body.push_str(&entry(target, &etag_for(files, target), is_dir));
+    body.push_str(&entry(prefix, target, &etag_for(files, target), is_dir));
 
     if depth == "1" && is_dir {
         for (name, dir) in children(files, target) {
@@ -249,7 +313,16 @@ fn multistatus(files: &BTreeMap<String, String>, target: &str, depth: &str) -> R
             } else {
                 format!("{target}/{name}")
             };
-            body.push_str(&entry(&path, &etag_for(files, &path), dir));
+            body.push_str(&entry(prefix, &path, &etag_for(files, &path), dir));
+        }
+    }
+    if depth == "1" {
+        if let Some(href) = poison {
+            body.push_str(&format!(
+                "<d:response><d:href>{prefix}/{href}</d:href>\
+                 <d:propstat><d:prop><d:getetag>\"poison\"</d:getetag>\
+                 <d:resourcetype/></d:prop></d:propstat></d:response>"
+            ));
         }
     }
     body.push_str("</d:multistatus>");
@@ -315,18 +388,18 @@ fn short_hash(bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())[..16].to_string()
 }
 
-fn entry(rel: &str, etag: &str, is_dir: bool) -> String {
+fn entry(prefix: &str, rel: &str, etag: &str, is_dir: bool) -> String {
     let encoded: String = rel
         .split('/')
         .map(|segment| utf8_percent_encode(segment, PATH_SET).to_string())
         .collect::<Vec<_>>()
         .join("/");
     let href = if rel.is_empty() {
-        format!("/remote.php/dav/files/{USER}/{ROOT}/")
+        format!("{prefix}/")
     } else if is_dir {
-        format!("/remote.php/dav/files/{USER}/{ROOT}/{encoded}/")
+        format!("{prefix}/{encoded}/")
     } else {
-        format!("/remote.php/dav/files/{USER}/{ROOT}/{encoded}")
+        format!("{prefix}/{encoded}")
     };
     let resourcetype = if is_dir { "<d:collection/>" } else { "" };
     format!(

@@ -2,6 +2,14 @@
 
 ## 2026-08-15
 
+* **Update**: Public share links are a supported credential —
+  `source.share_token` uses `/public.php/dav/files/{token}`, needs no account,
+  and is read-only by construction. Documented in
+  [Configuration](interfaces/configuration.md).
+* **Update**: [Security model](architecture/security-model.md) gained a section
+  on not trusting the source: paths from a `PROPFIND` response are validated
+  before they are joined onto a local directory. A crafted `href` could
+  previously have written outside the working copy.
 * **Update**: The watcher no longer writes to Nextcloud at all.
   `report.webdav_status_path` is gone from the configuration surface, together
   with the validation that kept it outside `source.path` and the self-write

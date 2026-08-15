@@ -72,7 +72,7 @@ annoys you.
 
 | Rung | You configure | You get |
 |---|---|---|
-| 1 | a WebDAV credential | builds on a timer or poll; nothing else to install |
+| 1 | a share link, or a WebDAV account | builds on a timer or poll; nothing else to install |
 | 2 | notify_push in Nextcloud | changes go live in about a second |
 | 3 | the companion Nextcloud app | build history and results in a real UI |
 
