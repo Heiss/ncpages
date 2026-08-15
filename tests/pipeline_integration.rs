@@ -286,8 +286,7 @@ async fn hooks_see_the_previous_release_for_diffing() {
     let log = phases(work.path());
     let last = log
         .lines()
-        .filter(|l| l.starts_with("post_publish"))
-        .next_back()
+        .rfind(|l| l.starts_with("post_publish"))
         .unwrap();
     assert!(
         last.contains(&format!("prev={}", first.display())),

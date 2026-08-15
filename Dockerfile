@@ -2,7 +2,10 @@
 # produce amd64 and arm64 from the same file. A large part of the homelab
 # audience runs arm64.
 
-FROM rust:1.89-slim AS build
+# The build and runtime images must share a Debian release: a binary linked
+# against a newer glibc fails at startup with a version error that looks like a
+# missing library. Keep both on bookworm.
+FROM rust:1.89-slim-bookworm AS build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
