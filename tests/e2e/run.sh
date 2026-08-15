@@ -111,19 +111,20 @@ echo "  published ${elapsed}s after the upload"
 
 log "a deleted note disappears from the site"
 curl -fsS -u "$AUTH" -X DELETE "$DAV/n5.md" >/dev/null
-sleep 20
-curl -fsS -o /dev/null -w '%{http_code}' "$SITE/n5.html" | grep -q "404" \
+# Note the absent -f: 404 is the expected outcome here, not a transport error.
+status_is_404() { [ "$(curl -sS -o /dev/null -w '%{http_code}' "$SITE/n5.html")" = "404" ]; }
+wait_for "removal" 60 status_is_404 \
   || fail "the deleted note is still being served"
 
 log "a collapsed vault does not reach the live site"
 for i in 1 2 3 4; do
   curl -fsS -u "$AUTH" -X DELETE "$DAV/n$i.md" >/dev/null
 done
-sleep 25
-curl -fsS "$SITE/pushed.html" | grep -q "pushed" \
-  || fail "the gate let a collapsed vault replace the published site"
-$COMPOSE logs watcher 2>&1 | grep -q "gate refused" \
+gate_refused() { $COMPOSE logs watcher 2>&1 | grep -q "gate refused"; }
+wait_for "gate" 90 gate_refused \
   || fail "the gate did not refuse the collapsed build"
+curl -fsS "$SITE/pushed.html" | grep -q "pushed" \
+  || fail "the gate refused, but the live site changed anyway"
 echo "  confirmed: the gate refused, the previous release is still served"
 
 printf '\n\033[32me2e passed\033[0m\n'
