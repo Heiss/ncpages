@@ -48,6 +48,40 @@ Shipped source kinds: `webdav` and `fs`. Shipped publish backend: `symlink`.
 
 The only abstraction v1 needs is **core versus recipe**.
 
+# Needs a measurement first
+
+**RFC 6578 collection sync (`sync-token` REPORT).** Nextcloud supports it, and
+`obsidian-nextcloudsync` uses it: one `REPORT` returns every change since a
+token, including deletions, instead of descending the tree by ETag.
+
+The intuition is that one call beats a descent. It is probably right, but not
+where it first appears, so this should be measured rather than assumed:
+
+* **Idle** — the overwhelmingly common case, once every poll interval. ETag
+  descent already costs exactly *one* request here, and so would a `REPORT`. No
+  win.
+* **After a change** — descent costs one request per directory along the changed
+  paths. For the reference deployment, a flat `docs/` with about 40 files, that
+  is two requests. For a deep vault it grows with depth, and a `REPORT` stays at
+  one. The win is real but scales with tree shape, not with vault size.
+* **Deletions** — the current implementation finds them by listing the whole tree
+  and diffing. A `REPORT` reports them directly. This is likely the largest
+  practical win, and it grows with the number of directories.
+
+What it costs: a second code path that only works against Nextcloud, so the ETag
+descent has to stay for `fs` sources, plain WebDAV servers and any deployment
+where propagation behaves oddly. Sync tokens also expire, and the expiry path —
+fall back to a full listing — is exactly the kind of code that stays untested
+until the day it runs.
+
+**How to measure it.** The mock Nextcloud already counts requests, and the
+integration tests already assert exact counts. A benchmark over three vault
+shapes — flat (50 files), deep (5×5×5), wide (500 files in one directory) — for
+five scenarios — idle, one file edited, one added, one deleted, a rename that
+touches many files — gives request counts and wall time for both strategies side
+by side. If the flat and idle cases do not improve, this is an optimisation for
+other people's vaults, which is still a reason to do it, just a different one.
+
 # Publication
 
 Not automatic — a tool in someone else's publishing path carries obligations. What

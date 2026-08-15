@@ -2,6 +2,10 @@
 
 ## 2026-08-15
 
+* **Update**: [Roadmap](roadmap.md) gained a section for changes that need a
+  measurement before they are worth making, starting with RFC 6578 collection
+  sync as an alternative to descending by ETag — including the experiment that
+  would settle it.
 * **Update**: Public share links are a supported credential —
   `source.share_token` uses `/public.php/dav/files/{token}`, needs no account,
   and is read-only by construction. Documented in
