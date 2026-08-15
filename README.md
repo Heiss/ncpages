@@ -8,11 +8,28 @@ without touching git. Nothing in the core is specific to that stack — the site
 generator, the navigation logic and every external side effect live in scripts you
 supply.
 
-> **Status: design complete, implementation not started.** Nothing here works yet.
-> The full design — architecture, interfaces, decision records with the rejected
+> **Status: early. The pipeline runs end to end; do not point it at a site you
+> care about yet.** Implemented: WebDAV and filesystem sources, debounced
+> scheduling, assembly, the four hook phases, the quality gate, atomic publish
+> with retention and rollback, serving, `doctor`. Not yet: the notify_push
+> trigger (polling covers it) and the status file written back to Nextcloud
+> (`/healthz` and ntfy cover it).
+>
+> The design — architecture, interfaces, decision records with the rejected
 > alternatives, failure catalogue — is in [`knowledge/`](knowledge/index.md), as an
 > [OKF v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
 > bundle. Start at [`knowledge/overview.md`](knowledge/overview.md).
+
+## Try it in one command
+
+```sh
+cargo build --release
+./examples/local-dev/smoke-test.sh ./target/release/ncpages
+```
+
+That builds a throwaway vault, publishes it, serves it, changes a note and waits
+for the swap to go live, then empties the vault and checks that the gate keeps the
+old site online.
 
 **Documentation: <https://heiss.github.io/ncpages/>** — built with Zensical
 directly from `knowledge/`, so the published documentation and the bundle in this

@@ -2,6 +2,13 @@
 
 ## 2026-08-15
 
+* **Creation**: [Command line](interfaces/cli.md), documenting the roles the
+  binary can take.
+* **Update**: [Configuration](interfaces/configuration.md) rewritten against the
+  implementation — added `paths`, `serve`, `health`, `build.kind`/`command`/
+  `token_file` and `gate.forbid_duplicate_basenames`, and a per-section status
+  table. `triggers.push` and `report.webdav_status_path` are configured but not
+  yet implemented; `gate.max_nav_churn` was dropped as a recipe concern.
 * **Update**: This bundle is now the source of the published documentation site.
   Zensical builds it directly (`docs_dir = "knowledge"`) and GitHub Actions
   deploys it to GitHub Pages; `tools/check_bundle.py` gates the build on OKF

@@ -48,6 +48,7 @@ before touching the code. Start with the overview, then the pipeline.
 
 # Interfaces
 
+* [Command line](interfaces/cli.md) — the roles one binary can take
 * [Configuration](interfaces/configuration.md) — `ncpages.toml`, field by field
 * [Hook contract](interfaces/hook-contract.md) — four phases, environment, exit codes
 * [Quality gate](interfaces/quality-gate.md) — the checks between build and publish
@@ -90,5 +91,9 @@ them, they win — except where the
 [audit](history/current-setup-audit.md) supersedes both, which it does for anything
 concerning the current repository.
 
-Nothing here has been implemented yet. Concepts describing designed-but-unbuilt
-interfaces carry `status: draft`.
+The core pipeline is implemented and exercised end to end — sync, assemble, hooks,
+build, gate, atomic publish, serving, `doctor`. Not yet built: the notify_push
+trigger and the status file written back to Nextcloud; polling covers the first,
+`/healthz` and ntfy cover the second. Per-section status is in
+[Configuration](interfaces/configuration.md); concepts describing
+designed-but-unbuilt interfaces carry `status: draft`.

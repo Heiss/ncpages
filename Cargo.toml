@@ -1,0 +1,36 @@
+[package]
+name = "ncpages"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "Apache-2.0"
+description = "Watch a Nextcloud folder, build a static site when it changes, publish it atomically."
+repository = "https://github.com/Heiss/ncpages"
+readme = "README.md"
+keywords = ["nextcloud", "webdav", "static-site", "publishing"]
+categories = ["command-line-utilities", "web-programming"]
+
+[dependencies]
+anyhow = "1"
+axum = "0.8"
+clap = { version = "4", features = ["derive"] }
+humantime-serde = "1"
+percent-encoding = "2"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+roxmltree = "0.20"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "process", "signal", "sync", "time"] }
+toml = "0.8"
+tower-http = { version = "0.6", features = ["fs"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+walkdir = "2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+strip = true

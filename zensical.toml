@@ -39,6 +39,7 @@ nav = [
   ] },
   { "Interfaces" = [
     "interfaces/index.md",
+    { "Command line" = "interfaces/cli.md" },
     { "Configuration" = "interfaces/configuration.md" },
     { "Hook contract" = "interfaces/hook-contract.md" },
     { "Quality gate" = "interfaces/quality-gate.md" },

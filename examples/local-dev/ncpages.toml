@@ -1,0 +1,59 @@
+# Local development setup: a filesystem source and an in-process build.
+#
+# This is NOT a production configuration. `build.kind = "local"` runs the
+# generator in the ncpages process, which has the source credentials and network
+# access; production uses `kind = "agent"` and a builder container with no egress
+# and no secrets. See knowledge/decisions/watcher-builder-split.md.
+#
+# Paths below are rewritten by smoke-test.sh; edit them for manual use.
+
+schema_version = 1
+
+[source]
+kind = "fs"
+path = "REPLACED/vault"
+
+[paths]
+src = "REPLACED/work/src"
+build = "REPLACED/work/build"
+state = "REPLACED/work/state"
+config_dir = "REPLACED/etc"
+
+[triggers]
+poll = "2s"
+
+[schedule]
+debounce = "1s"
+max_delay = "5s"
+
+[assemble]
+# Everything executable comes from config_dir, never from the watched folder.
+overlay = ["build.sh"]
+source_subdir = "docs"
+
+[build]
+kind = "local"
+command = ["./build.sh"]
+timeout = "2m"
+output = "site"
+
+[[hooks.pre_build]]
+run = "note.sh"
+
+[[hooks.post_publish]]
+run = "note.sh"
+
+[gate]
+require_files = ["index.html", "sitemap.xml"]
+min_pages = 3
+max_page_drop = 0.4
+
+[publish]
+root = "REPLACED/work/publish"
+keep_releases = 3
+
+[serve]
+listen = "127.0.0.1:8099"
+
+[health]
+listen = "127.0.0.1:9099"

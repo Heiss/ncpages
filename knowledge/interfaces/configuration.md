@@ -1,30 +1,30 @@
 ---
 type: Configuration Reference
 title: ncpages.toml
-description: Full configuration surface of the service, section by section, with the constraints each field carries.
+description: Full configuration surface, section by section, with the constraint each field carries and its status in the implementation.
 resource: file:///etc/ncpages/ncpages.toml
 tags: [configuration, reference, interface]
 status: draft
-generated: { by: claude-code/opus-5, at: 2026-08-15T00:45:00Z }
+generated: { by: claude-code/opus-5, at: 2026-08-15T13:30:00Z }
 sources:
+  - id: implementation
+    resource: https://github.com/Heiss/ncpages/blob/main/src/config.rs
+    title: src/config.rs
+    author: human:heiss
+    last_modified: 2026-08-15
   - id: concept
     resource: ../history/original-concept-note.md
     title: ncpages concept note, 2026-08-15
     author: human:heiss
     last_modified: 2026-08-15
-  - id: session
-    resource: ../history/design-session-transcript.md
-    title: ncpages design session, 2026-08-15
-    author: human:heiss
-    last_modified: 2026-08-15
 ---
 
-The config file lives in the read-only config directory, never in the vault. Values
-below are placeholders; the reference recipe's concrete values are in
-[zensical + obsidian](../recipes/zensical-obsidian.md).
+The config file lives in the read-only config directory, never in the vault.
+Unknown keys are rejected rather than ignored, so a typo fails at startup instead
+of silently disabling something.
 
-`status: draft` — this surface is designed but not yet implemented; field names may
-still move before `schema_version = 1` is frozen.
+`schema_version = 1` is not yet frozen: fields may still move before the first
+release.
 
 # Example
 
@@ -40,6 +40,12 @@ user          = "publisher"
 password_file = "/run/secrets/nc_app_password"
 required      = false                     # start even if the source is unreachable
 
+[paths]
+src        = "/work/src"                  # vault working copy
+build      = "/work/build"                # assembled build tree
+state      = "/work/state"                # ETags, hashes, build history
+config_dir = "/etc/ncpages"               # overlay + hooks/, read-only, outside the vault
+
 [triggers]
 push   = "ws://notify-push:7867/ws"       # omit to disable
 poll   = "30s"                            # safety net, stays on when push is active
@@ -49,16 +55,19 @@ jitter = 0.1
 [schedule]
 debounce  = "10s"
 max_delay = "120s"
-on_busy   = "queue_latest"
+on_busy   = "queue_latest"                # the only accepted value
 
 [assemble]
-overlay       = ["<generator config>", "<lockfile>", "overrides", "src"]
+overlay       = ["zensical.toml", "uv.lock", "overrides", "src"]
 source_subdir = "docs"
 
 [build]
-url     = "http://builder:8080"
-timeout = "10m"
-output  = "site"
+kind       = "agent"                      # agent | local
+url        = "http://builder:8080"
+token_file = "/run/secrets/build_token"
+command    = ["zensical", "build", "--clean"]   # runs inside the builder
+timeout    = "10m"
+output     = "site"
 
 [[hooks.pre_build]]
 run = "nav_from_frontmatter.py"
@@ -70,55 +79,83 @@ env_passthrough = ["SOME_API_TOKEN"]
 run = "send_webmentions.sh"
 
 [gate]
-require_files = ["index.html", "sitemap.xml"]
-min_pages     = 5
-max_page_drop = 0.4
-max_nav_churn = 10
+require_files              = ["index.html", "sitemap.xml"]
+min_pages                  = 5
+max_page_drop              = 0.4
+forbid_duplicate_basenames = true
 
 [publish]
-kind          = "symlink"
-root          = "/work/releases"
+root          = "/work/publish"           # holds releases/ and current
 keep_releases = 5
+
+[serve]
+enabled              = true
+listen               = "0.0.0.0:8080"
+cache_control_assets = "public, max-age=31536000, immutable"
+cache_control_html   = "no-cache"
+
+[health]
+listen = "0.0.0.0:9090"
 
 [report]
 webdav_status_path = "Notes/_blog-status/build.md"   # OUTSIDE source.path
 ntfy_topic         = "https://ntfy.sh/…"
 ```
 
-# Constraints worth stating explicitly
+# Constraints enforced at startup
 
-**`source.url` must be an HTTP frontend.** With an FPM-based Nextcloud image, this
-points at nginx. Pointing it at the FPM container yields errors that look like
-authentication problems.
+These are checked in `Config::validate` and refuse to start rather than warn.
+
+**The hook directory must be outside `paths.src`.** A build is code execution; a
+hook inside the working copy would give a shell to everyone the folder is shared
+with. The same applies to `paths.config_dir`.
+
+**`report.webdav_status_path` must be outside `source.path`.** Otherwise: write
+status → root ETag changes → trigger → build → write status → forever. Path
+excludes do not help, because the root ETag is path-blind.
+
+**`schedule.on_busy` accepts only `queue_latest`.** Cancelling a running build can
+leave a published state whose irreversible `post_publish` effects half-fired.
+
+**WebDAV sources require `url`, `user` and `password_file`;** agent builds require
+`url`; local builds require `command`.
+
+# Notes per section
+
+**`source.url`** must be an HTTP frontend. With an FPM-based Nextcloud image that
+is nginx — the FPM container speaks FastCGI, and pointing at it produces errors
+that look like authentication failures.
 
 **`source.host_header`** exists because the internal URL is not the public one.
-`server_name` matching and `trusted_domains` need the real domain.
 
 **`source.required = false`** is the default posture: the working copy is
-persistent, so an unreachable Nextcloud degrades the service rather than stopping
-it. See [Source as working copy](../decisions/source-as-working-copy.md).
+persistent, so an unreachable source degrades the service rather than stopping it.
 
-**`triggers.poll` stays enabled when `push` is set.** Push is an accelerator, not a
-replacement — a dropped WebSocket must not mean a silently frozen site.
+**`paths.build` and `publish.root` must share a filesystem**, or moving the build
+output into a release degrades from a rename to a copy. `ncpages doctor` checks it.
 
-**`triggers.jitter`** spreads timer builds across installations so they do not all
-hit the same external APIs at the same second.
+**`triggers.poll` stays enabled when `push` is set.** A dropped WebSocket must not
+mean a silently frozen site.
 
-**`schedule.on_busy`** has one supported value, `queue_latest`. Cancelling running
-builds is unsafe by design.
+**`build.kind = "local"`** runs the generator in the ncpages process, which holds
+the source credentials and network access. It exists for development; production
+uses `agent`. `doctor` warns whenever it is active.
 
-**`assemble.overlay`** lists everything copied from the config directory into the
-build tree. Anything executable or configuring belongs here; if it is in the vault
-instead, the security model is void.
+**`serve.cache_control_*`**: paths containing `/assets/` get the immutable value,
+everything else the HTML value. Getting this backwards means old HTML referencing
+asset names that no longer exist.
 
-**`report.webdav_status_path` must not be inside `source.path`.** Otherwise:
-write status → root ETag changes → trigger → build → write status → forever. Path
-excludes do not help; the root ETag is path-blind.
+**Secrets** are read from files (`*_file`), never inline, and reach hooks only
+through explicit `env_passthrough`. The builder receives none of them.
 
-**Fail-closed startup check.** If the hook directory resolves inside `source.path`,
-the service refuses to start.
+# Implementation status
 
-# Secrets
-
-Secrets are passed as files (`*_file`), never as inline values, and reach hooks
-only through explicit `env_passthrough`. The builder receives none of them.
+| Section | State |
+|---|---|
+| `source` (`webdav`, `fs`), `paths`, `assemble`, `build`, `gate`, `publish`, `serve`, `health` | implemented |
+| `triggers.poll`, `triggers.timer`, `triggers.jitter`, `schedule` | implemented |
+| `hooks.*` with the four-phase contract | implemented |
+| `report.ntfy_topic` | implemented for failures, gate refusals and conflict copies |
+| `triggers.push` (notify_push WebSocket) | **not yet implemented** — configured, ignored |
+| `report.webdav_status_path` | **not yet implemented** — validated, not written |
+| `gate.max_nav_churn` | **not implemented**; navigation is a recipe concern, so this may not belong in the core at all |
