@@ -134,12 +134,30 @@ leave a published state whose irreversible `post_publish` effects half-fired.
 is nginx — the FPM container speaks FastCGI, and pointing at it produces errors
 that look like authentication failures.
 
-**`source.share_token` is an alternative to an account**, not an addition — giving
-both is refused. It uses Nextcloud's public share endpoint
-(`/public.php/dav/files/{token}`, Nextcloud 29 and later) and is the smallest
-setup there is: no account credential leaves Nextcloud, the share is read-only by
-nature, and revoking it is one click in the web UI. A password-protected share
-authenticates as the literal user `anonymous` with the share password.
+## Choosing a credential
+
+Both are fully supported. They differ in what an attacker gets if the file holding
+them is read.
+
+| | Share link | Account (app password) |
+|---|---|---|
+| Endpoint | `/public.php/dav/files/{token}` | `/remote.php/dav/files/{user}` |
+| Scope | the shared folder only | everything that user can see |
+| Rights | read-only by construction | read **and write**, unless narrowed |
+| Setup | create a share, copy the id from the URL | create an app password |
+| Revoking | one click on the share | revoke the app password |
+| Requires | Nextcloud 29 or later | any version |
+| Auth | none, or `anonymous` + share password | user + app password |
+
+The share link is the smaller blast radius and the smaller setup, and it matches
+what ncpages does: read. An account is the right choice when the folder cannot be
+shared — group folders, external storage, or a policy that forbids public links —
+and when a recipe needs Nextcloud APIs beyond WebDAV.
+
+Configure one or the other. Giving both in the same `[source]` is refused rather
+than resolved by precedence, because a silent winner between two credentials is
+the kind of thing nobody notices until it matters. Use two deployments if you
+genuinely need both.
 
 Requests carry `X-Requested-With: XMLHttpRequest`, which the public endpoint
 requires for anything that is not a GET; without it Nextcloud answers 401 and the
