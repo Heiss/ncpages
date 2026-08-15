@@ -9,11 +9,10 @@ generator, the navigation logic and every external side effect live in scripts y
 supply.
 
 > **Status: early. The pipeline runs end to end; do not point it at a site you
-> care about yet.** Implemented: WebDAV and filesystem sources, debounced
-> scheduling, assembly, the four hook phases, the quality gate, atomic publish
-> with retention and rollback, serving, `doctor`. Not yet: the notify_push
-> trigger (polling covers it) and the status file written back to Nextcloud
-> (`/healthz` and ntfy cover it).
+> care about yet.** Implemented: WebDAV and filesystem sources, notify_push,
+> debounced scheduling, assembly, the four hook phases, the quality gate, atomic
+> publish with retention and rollback, serving, `doctor`. Not yet: the status file
+> written back to Nextcloud (`/healthz` and ntfy cover it in the meantime).
 >
 > The design — architecture, interfaces, decision records with the rejected
 > alternatives, failure catalogue — is in [`knowledge/`](knowledge/index.md), as an
@@ -30,6 +29,23 @@ cargo build --release
 That builds a throwaway vault, publishes it, serves it, changes a note and waits
 for the swap to go live, then empties the vault and checks that the gate keeps the
 old site online.
+
+## Tests
+
+```sh
+cargo test                                   # unit + integration, a few seconds
+examples/local-dev/smoke-test.sh             # the binary as an operator uses it
+tests/e2e/run.sh                             # real Nextcloud + notify_push, ~5 min
+```
+
+The integration layer runs against a mock Nextcloud that reproduces **ETag
+propagation**, so the central efficiency claim is an assertion rather than a
+comment: an unchanged vault must cost exactly one request. The end-to-end layer
+proves what a mock cannot — that notify_push really delivers (the poll interval
+is set to 300s, and a change must go live within 60) and that the build container
+genuinely has no route to the internet.
+
+Details in [`knowledge/operations/test-strategy.md`](knowledge/operations/test-strategy.md).
 
 **Documentation: <https://heiss.github.io/ncpages/>** — built with Zensical
 directly from `knowledge/`, so the published documentation and the bundle in this

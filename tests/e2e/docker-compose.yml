@@ -1,0 +1,112 @@
+# End-to-end environment: a real Nextcloud with notify_push, and ncpages in the
+# production topology — watcher and builder as separate containers, the builder
+# on a network with no egress.
+#
+# Deliberately not Nextcloud AIO: its mastercontainer manages its own containers
+# through the Docker socket and expects a domain with TLS and a web installer,
+# which cannot be scripted in CI and would test AIO rather than ncpages. The
+# interfaces that matter here — WebDAV, ETag propagation, notify_push — are
+# identical.
+
+name: ncpages-e2e
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD: nextcloud
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nextcloud"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    networks: [cloud]
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    networks: [cloud]
+
+  nextcloud:
+    image: nextcloud:31-apache
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD: nextcloud
+      REDIS_HOST: redis
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD: admin-password-123
+      NEXTCLOUD_TRUSTED_DOMAINS: nextcloud localhost 127.0.0.1
+    volumes:
+      - nextcloud:/var/www/html
+    ports:
+      - "8081:80"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/status.php | grep -q '\"installed\":true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+    networks: [cloud]
+
+  # The push service ships inside the app, so it runs from the same image with
+  # the app directory shared. It restarts until the app has been installed.
+  notify-push:
+    image: nextcloud:31-apache
+    restart: unless-stopped
+    depends_on:
+      nextcloud: { condition: service_healthy }
+    entrypoint: ["/var/www/html/custom_apps/notify_push/bin/x86_64/notify_push"]
+    command: ["--port", "7867", "--database-url", "postgres://nextcloud:nextcloud@db/nextcloud", "--redis-url", "redis://redis", "--nextcloud-url", "http://nextcloud"]
+    environment:
+      NEXTCLOUD_URL: http://nextcloud
+    volumes:
+      - nextcloud:/var/www/html:ro
+    networks: [cloud]
+
+  # No egress: build tools, no credentials, no route to the internet.
+  builder:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command: ["build-agent", "--listen", "0.0.0.0:8080"]
+    volumes:
+      - work:/work
+      - ./etc:/etc/ncpages:ro
+    networks: [build]
+
+  watcher:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command: ["run"]
+    depends_on:
+      nextcloud: { condition: service_healthy }
+    volumes:
+      - work:/work
+      - ./etc:/etc/ncpages:ro
+    ports:
+      - "8099:8080"   # the published site
+      - "9099:9090"   # /healthz
+    networks: [cloud, build]
+
+volumes:
+  nextcloud:
+  work:
+
+networks:
+  cloud:
+    ipam:
+      config:
+        - subnet: 172.29.0.0/16
+  build:
+    internal: true

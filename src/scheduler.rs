@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use tokio::time::MissedTickBehavior;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::config::Config;
 use crate::pipeline;
@@ -73,6 +73,19 @@ pub async fn run(
         t
     });
 
+    // Push is an accelerator on top of the poll, not a replacement for it: a
+    // socket that dies quietly must cost latency, not correctness.
+    let (push_tx, mut push_rx) = tokio::sync::mpsc::channel::<()>(1);
+    if let Some(url) = config.triggers.push.clone() {
+        match (config.source.user.clone(), config.source_password()?) {
+            (Some(user), Some(password)) => {
+                info!(url = %url, "notify_push enabled");
+                tokio::spawn(crate::push::run(url, user, password, push_tx));
+            }
+            _ => warn!("triggers.push is set but the source has no credentials; push disabled"),
+        }
+    }
+
     let mut first_seen: Option<Instant> = dirty.then(Instant::now);
     let mut last_event: Option<Instant> = first_seen;
     let mut shutdown = shutdown;
@@ -109,6 +122,17 @@ pub async fn run(
                         set_source_status(&health, "degraded").await;
                     }
                 }
+            }
+
+            Some(()) = push_rx.recv() => {
+                // The event says only that something changed. Whether it was
+                // real is decided by the ETag check inside the sync.
+                debug!("push trigger");
+                if first_seen.is_none() {
+                    first_seen = Some(Instant::now());
+                    trigger = "push";
+                }
+                last_event = Some(Instant::now());
             }
 
             _ = async { timer.as_mut().unwrap().tick().await }, if timer.is_some() => {

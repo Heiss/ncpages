@@ -70,6 +70,7 @@ nav = [
   ] },
   { "Operations" = [
     "operations/index.md",
+    { "Test strategy" = "operations/test-strategy.md" },
     { "Cutover runbook" = "operations/cutover-runbook.md" },
     { "Failure modes" = "operations/failure-modes.md" },
     { "Doctor checks" = "operations/doctor-checks.md" },

@@ -1,0 +1,40 @@
+name: End-to-end
+
+# The E2E stack takes a few minutes to come up, so it does not gate every push.
+# It runs on main, nightly, and on demand.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "Cargo.*"
+      - "Dockerfile"
+      - "tests/e2e/**"
+      - ".github/workflows/e2e.yml"
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Run the end-to-end suite
+        run: tests/e2e/run.sh
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          cd tests/e2e
+          docker compose ps || true
+          docker compose logs --tail 300 || true

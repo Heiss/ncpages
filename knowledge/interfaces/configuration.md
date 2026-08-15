@@ -153,9 +153,8 @@ through explicit `env_passthrough`. The builder receives none of them.
 | Section | State |
 |---|---|
 | `source` (`webdav`, `fs`), `paths`, `assemble`, `build`, `gate`, `publish`, `serve`, `health` | implemented |
-| `triggers.poll`, `triggers.timer`, `triggers.jitter`, `schedule` | implemented |
+| `triggers.push` (notify_push), `triggers.poll`, `triggers.timer`, `triggers.jitter`, `schedule` | implemented |
 | `hooks.*` with the four-phase contract | implemented |
 | `report.ntfy_topic` | implemented for failures, gate refusals and conflict copies |
-| `triggers.push` (notify_push WebSocket) | **not yet implemented** — configured, ignored |
 | `report.webdav_status_path` | **not yet implemented** — validated, not written |
 | `gate.max_nav_churn` | **not implemented**; navigation is a recipe concern, so this may not belong in the core at all |

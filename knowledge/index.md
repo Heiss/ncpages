@@ -68,6 +68,7 @@ before touching the code. Start with the overview, then the pipeline.
 
 # Operations
 
+* [Test strategy](operations/test-strategy.md) — four layers, and what each proves
 * [Cutover runbook](operations/cutover-runbook.md) — the migration, phase by phase
 * [Failure modes](operations/failure-modes.md) — everything found in the red-team pass
 * [Doctor checks](operations/doctor-checks.md) — the diagnostics that keep support

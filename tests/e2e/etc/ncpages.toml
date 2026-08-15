@@ -1,0 +1,59 @@
+# E2E configuration.
+#
+# The poll interval is deliberately long: if a change goes live within seconds,
+# only notify_push can explain it. That is the assertion the E2E makes.
+
+schema_version = 1
+
+[source]
+kind          = "webdav"
+url           = "http://nextcloud"
+host_header   = "localhost"
+path          = "Notes/blog"
+user          = "admin"
+password_file = "/etc/ncpages/password"
+required      = false
+
+[paths]
+src        = "/work/src"
+build      = "/work/build"
+state      = "/work/state"
+config_dir = "/etc/ncpages"
+
+[triggers]
+push = "ws://notify-push:7867/ws"
+poll = "300s"
+
+[schedule]
+debounce  = "2s"
+max_delay = "10s"
+
+[assemble]
+overlay       = ["build.sh"]
+source_subdir = "docs"
+
+[build]
+kind       = "agent"
+url        = "http://builder:8080"
+token_file = "/etc/ncpages/build-token"
+command    = ["./build.sh"]
+timeout    = "2m"
+output     = "site"
+
+[[hooks.post_publish]]
+run = "record.sh"
+
+[gate]
+require_files = ["index.html"]
+min_pages     = 2
+max_page_drop = 0.4
+
+[publish]
+root          = "/work/publish"
+keep_releases = 3
+
+[serve]
+listen = "0.0.0.0:8080"
+
+[health]
+listen = "0.0.0.0:9090"

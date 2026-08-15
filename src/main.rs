@@ -7,20 +7,6 @@
 //! `build-agent` is the builder side, which holds the build tools and neither
 //! credentials nor network egress.
 
-mod agent;
-mod config;
-mod doctor;
-mod fsutil;
-mod gate;
-mod hooks;
-mod pipeline;
-mod publish;
-mod report;
-mod scheduler;
-mod serve;
-mod source;
-mod state;
-
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -29,8 +15,9 @@ use clap::{Parser, Subcommand};
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
-use crate::config::Config;
-use crate::serve::{Health, SharedHealth};
+use ncpages::config::Config;
+use ncpages::serve::{Health, SharedHealth};
+use ncpages::{agent, doctor, pipeline, publish, scheduler, serve, source, state};
 
 #[derive(Parser)]
 #[command(name = "ncpages", version, about, long_about = None)]

@@ -10,10 +10,19 @@ readme = "README.md"
 keywords = ["nextcloud", "webdav", "static-site", "publishing"]
 categories = ["command-line-utilities", "web-programming"]
 
+[lib]
+name = "ncpages"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ncpages"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1"
 axum = "0.8"
 clap = { version = "4", features = ["derive"] }
+futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
 humantime-serde = "1"
 percent-encoding = "2"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
@@ -22,6 +31,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "process", "signal", "sync", "time"] }
+tokio-tungstenite = "0.29.0"
 toml = "0.8"
 tower-http = { version = "0.6", features = ["fs"] }
 tracing = "0.1"

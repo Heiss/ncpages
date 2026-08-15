@@ -2,6 +2,12 @@
 
 ## 2026-08-15
 
+* **Creation**: [Test strategy](operations/test-strategy.md) — four layers, the
+  mock Nextcloud that reproduces ETag propagation rather than stubbing it, and
+  why the end-to-end stack uses the plain Nextcloud image instead of AIO.
+* **Update**: notify_push is implemented; `triggers.push` is no longer inert.
+  The end-to-end suite asserts it by setting `poll = "300s"` and requiring a
+  change to go live within 60 seconds.
 * **Creation**: [Command line](interfaces/cli.md), documenting the roles the
   binary can take.
 * **Update**: [Configuration](interfaces/configuration.md) rewritten against the

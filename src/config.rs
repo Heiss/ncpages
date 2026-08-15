@@ -662,6 +662,61 @@ mod tests {
     }
 
     #[test]
+    fn the_hook_environment_matches_the_documented_contract() {
+        let c = base();
+        let release = PathBuf::from("/work/publish/releases/20260815T101500Z");
+        let prev = PathBuf::from("/work/publish/releases/20260814T101500Z");
+        let env = hook_env(&c, Some(&release), Some(&prev), "push");
+
+        // Renaming any of these is a breaking change for every recipe.
+        assert_eq!(
+            env.keys().cloned().collect::<Vec<_>>(),
+            vec![
+                "NCPAGES_BUILD_DIR",
+                "NCPAGES_OUT_DIR",
+                "NCPAGES_PREV_DIR",
+                "NCPAGES_RELEASE_DIR",
+                "NCPAGES_SRC_DIR",
+                "NCPAGES_TRIGGER",
+            ]
+        );
+        assert_eq!(env["NCPAGES_TRIGGER"], "push");
+        assert_eq!(env["NCPAGES_RELEASE_DIR"], release.display().to_string());
+        assert_eq!(env["NCPAGES_PREV_DIR"], prev.display().to_string());
+        assert!(env["NCPAGES_OUT_DIR"].ends_with("/build/site"));
+    }
+
+    #[test]
+    fn the_first_build_reports_an_empty_previous_release_rather_than_omitting_it() {
+        // A hook doing `diff "$NCPAGES_PREV_DIR"` must see an empty value, not
+        // an unset variable that expands to something surprising.
+        let env = hook_env(&base(), None, None, "manual");
+        assert_eq!(env["NCPAGES_PREV_DIR"], "");
+        assert_eq!(env["NCPAGES_RELEASE_DIR"], "");
+    }
+
+    #[test]
+    fn secrets_are_read_from_files_and_trimmed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("password");
+        std::fs::write(&path, "app-password\n").unwrap();
+
+        let mut c = base();
+        c.source.password_file = Some(path);
+        assert_eq!(
+            c.source_password().unwrap().as_deref(),
+            Some("app-password")
+        );
+    }
+
+    #[test]
+    fn a_missing_secret_file_fails_loudly() {
+        let mut c = base();
+        c.source.password_file = Some(PathBuf::from("/nonexistent/password"));
+        assert!(c.source_password().is_err());
+    }
+
+    #[test]
     fn unknown_keys_are_rejected_rather_than_silently_ignored() {
         let err = toml::from_str::<Config>(
             r#"
