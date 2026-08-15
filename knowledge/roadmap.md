@@ -52,7 +52,11 @@ The only abstraction v1 needs is **core versus recipe**.
 
 **RFC 6578 collection sync (`sync-token` REPORT).** Nextcloud supports it, and
 `obsidian-nextcloudsync` uses it: one `REPORT` returns every change since a
-token, including deletions, instead of descending the tree by ETag.
+token, including deletions, instead of descending the tree by ETag. It is also the
+only place a change *list* would ever come from — a companion Nextcloud app is not
+the answer, see
+[A service beside Nextcloud, not a Nextcloud app](decisions/service-not-nextcloud-app.md).
+Being the only candidate does not make it due, though.
 
 The intuition is that one call beats a descent. It is probably right, but not
 where it first appears, so this should be measured rather than assumed:
@@ -72,7 +76,9 @@ What it costs: a second code path that only works against Nextcloud, so the ETag
 descent has to stay for `fs` sources, plain WebDAV servers and any deployment
 where propagation behaves oddly. Sync tokens also expire, and the expiry path —
 fall back to a full listing — is exactly the kind of code that stays untested
-until the day it runs.
+until the day it runs. Whether the `REPORT` is even available over
+`public.php/dav` is unverified, and if it is not, the descent has to stay for
+share-link deployments regardless of the benchmark.
 
 **How to measure it.** The mock Nextcloud already counts requests, and the
 integration tests already assert exact counts. A benchmark over three vault

@@ -11,8 +11,9 @@ supply.
 > **Status: early. The pipeline runs end to end; do not point it at a site you
 > care about yet.** Implemented: WebDAV and filesystem sources, notify_push,
 > debounced scheduling, assembly, the four hook phases, the quality gate, atomic
-> publish with retention and rollback, serving, `doctor`. Not yet: the status file
-> written back to Nextcloud (`/healthz` and ntfy cover it in the meantime).
+> publish with retention and rollback, serving, `doctor`. Not yet: the companion
+> Nextcloud app that receives the build report (`/healthz` and ntfy cover it in the
+> meantime). Nothing is ever written back into the watched folder.
 >
 > The design — architecture, interfaces, decision records with the rejected
 > alternatives, failure catalogue — is in [`knowledge/`](knowledge/index.md), as an

@@ -1,7 +1,7 @@
 ---
 type: Interface Contract
 title: Health, status reporting and notifications
-description: What replaces the GitHub Actions dashboard — /healthz, a status file written back to Nextcloud, and push notifications.
+description: What replaces the GitHub Actions dashboard — /healthz, a report to the companion app, and push notifications.
 tags: [observability, health, reporting, interface]
 status: draft
 generated: { by: claude-code/opus-5, at: 2026-08-15T00:45:00Z }

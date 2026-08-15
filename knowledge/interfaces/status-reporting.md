@@ -31,6 +31,11 @@ shape.
 A separate project: a Nextcloud app that receives reports and presents them. It
 does not exist yet. ncpages is written so that this costs nothing until it does.
 
+It is a **sink**, deliberately: it never owns change detection, scheduling,
+building or publishing, and this payload is the whole interface. Why the work
+cannot move into it is recorded in
+[A service beside Nextcloud, not a Nextcloud app](../decisions/service-not-nextcloud-app.md).
+
 After a publish, ncpages sends `OPTIONS` to the report endpoint:
 
 * **not installed** → the probe is the entire cost. Nothing is sent, nothing is

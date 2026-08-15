@@ -2,6 +2,27 @@
 
 ## 2026-08-15
 
+* **Creation**: [A service beside Nextcloud, not a Nextcloud app](decisions/service-not-nextcloud-app.md)
+  — the objection "if an app ships anyway, why a separate service?" examined and
+  rejected: the app-only shape removes no component, cannot host the build
+  sandbox, has no execution model for long work, widens the blast radius into the
+  publicly served directory, and forfeits share-link deployments. The half that
+  holds — an app would add nothing to the *data* path — is recorded too, together
+  with what the app is genuinely for.
+  [Status reporting](interfaces/status-reporting.md) now states that the app is a
+  sink, and the [Roadmap](roadmap.md) notes that RFC 6578 does not become due just
+  by being the only remaining candidate for a change list, plus one unverified
+  cost: whether the `REPORT` works over `public.php/dav` at all.
+* **Correction**: [Index](index.md), [Observability](interfaces/observability.md)
+  and the README — the notify_push trigger is built, and the status file written
+  back to Nextcloud is gone by decision, not pending; what is outstanding is the
+  companion app that receives the report. The record count in the index was stale
+  as well.
+* **Creation**: `AGENTS.md` at the repository root — a routing map into this
+  bundle for agents working on the code: the invariants, a table from source file
+  to the concept that governs it, and the rules for keeping the bundle true. It
+  holds links and one-line hooks only; the text stays here.
+
 * **Update**: [Roadmap](roadmap.md) gained a section for changes that need a
   measurement before they are worth making, starting with RFC 6578 collection
   sync as an alternative to descending by ETag — including the experiment that

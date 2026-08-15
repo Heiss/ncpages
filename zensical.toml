@@ -65,6 +65,7 @@ nav = [
     { "Symlink swap" = "decisions/symlink-swap-publish.md" },
     { "External bridge network" = "decisions/external-bridge-network.md" },
     { "Source as working copy" = "decisions/source-as-working-copy.md" },
+    { "A service, not a Nextcloud app" = "decisions/service-not-nextcloud-app.md" },
   ] },
   { "Recipes" = [
     "recipes/index.md",

@@ -23,6 +23,10 @@ them look reasonable until you know why they fail here.
 * [Derive navigation from note frontmatter](navigation-from-frontmatter.md) - four options examined; the chosen one keeps the core generator-agnostic
 * [Scripts instead of a plugin system](hooks-not-plugins.md) - an interface that still works in five years
 
+# Scope
+
+* [A service beside Nextcloud, not a Nextcloud app](service-not-nextcloud-app.md) - moving the core into an app removes no component and costs the build sandbox
+
 # Delivery and deployment
 
 * [ncpages serves the site itself](self-hosted-delivery.md) - the largest simplification of the design

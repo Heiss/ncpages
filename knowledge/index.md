@@ -58,7 +58,7 @@ before touching the code. Start with the overview, then the pipeline.
 
 # Decisions
 
-* [Decision records](decisions/) — thirteen records covering why the system has
+* [Decision records](decisions/) — seventeen records covering why the system has
   this shape, including every alternative that was rejected
 
 # Recipes
@@ -94,8 +94,8 @@ them, they win — except where the
 concerning the current repository.
 
 The core pipeline is implemented and exercised end to end — sync, assemble, hooks,
-build, gate, atomic publish, serving, `doctor`. Not yet built: the notify_push
-trigger and the status file written back to Nextcloud; polling covers the first,
-`/healthz` and ntfy cover the second. Per-section status is in
+build, gate, atomic publish, serving, `doctor`, and the notify_push trigger. Not
+yet built: the companion Nextcloud app that receives the status report; `/healthz`
+and ntfy cover that channel meanwhile. Per-section status is in
 [Configuration](interfaces/configuration.md); concepts describing
 designed-but-unbuilt interfaces carry `status: draft`.
