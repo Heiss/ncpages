@@ -424,7 +424,11 @@ fn d_source_subdir() -> String {
     "docs".into()
 }
 fn d_build_kind() -> BuildKind {
-    BuildKind::Agent
+    // One container is the default shape: the generator runs as a subprocess, so
+    // a crash in it is an exit code rather than a dead service. Splitting the
+    // build into an isolated container is an option for people who want it, not
+    // a precondition for running this at all.
+    BuildKind::Local
 }
 fn d_build_timeout() -> Duration {
     Duration::from_secs(600)

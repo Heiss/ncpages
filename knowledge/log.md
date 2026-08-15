@@ -23,6 +23,21 @@
   to the concept that governs it, and the rules for keeping the bundle true. It
   holds links and one-line hooks only; the text stays here.
 
+* **Update**: The build is now the fourth phase of the same executor rather than
+  a mechanism of its own, and `build.kind` defaults to `"local"` — one image, one
+  container, the generator as a subprocess.
+  [Watcher/builder split](decisions/watcher-builder-split.md) is amended rather
+  than deleted: it hardened one step of four, while hooks always ran in the
+  privileged container, and a read-only share token buys most of the same
+  protection by configuration. [Hook contract](interfaces/hook-contract.md)
+  documents the two deliberate asymmetries between phases — exit codes and
+  environment.
+* **Update**: There is no `unsafe` in the crate, and `#![forbid(unsafe_code)]`
+  makes adding any a compile error. The one FFI call was replaced by the check it
+  was decorating.
+* **Update**: [Roadmap](roadmap.md) records `restart_until_publish` — interrupting
+  a build is safe up to the swap and unsafe after it, so the policy is designed
+  around that boundary rather than left as a yes/no switch.
 * **Update**: Multi-arch images are published to GHCR for both targets, and a
   production-shaped deployment template lives in `examples/zensical/` — compose
   stack, builder image with dependencies baked in from a frozen lockfile, and the

@@ -7,6 +7,8 @@
 //! `build-agent` is the builder side, which holds the build tools and neither
 //! credentials nor network egress.
 
+#![forbid(unsafe_code)]
+
 use std::path::PathBuf;
 use std::sync::Arc;
 

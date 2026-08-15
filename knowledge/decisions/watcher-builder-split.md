@@ -13,6 +13,27 @@ sources:
     last_modified: 2026-08-15
 ---
 
+> **Amended 2026-08-16: the split is now optional, and off by default.** The
+> reasoning below still holds for what it protects against — a generator
+> compromised through vault content — but that turned out to be narrower than it
+> first appeared, and the cost was paid by every operator. Two things changed the
+> balance:
+>
+> * **Hooks already run in the privileged container.** `pre_build` and
+>   `post_build` process the same untrusted vault content with network and
+>   secrets available. The split never covered them, so it hardened one step of
+>   four.
+> * **A share link is a read-only credential.** With
+>   [`share_token`](../interfaces/configuration.md), the worst a compromised
+>   generator gets is read access to one folder — which is most of what the
+>   isolation was buying, obtained by configuration rather than topology.
+>
+> So the default is one container: the generator runs as a subprocess, a crash in
+> it is an exit code rather than a dead service, and there is no shared volume,
+> no matching UID and no second image to keep in step.
+> `build.kind = "agent"` still does everything below, for anyone whose vault is
+> shared with people they do not fully trust.
+
 # Context
 
 The simplest implementation is one container that polls, builds and publishes. It

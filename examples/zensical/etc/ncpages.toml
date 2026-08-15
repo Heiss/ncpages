@@ -60,17 +60,23 @@ on_busy   = "queue_latest"
 [assemble]
 # Copied from config_dir into the build tree. Jinja templates are executable, so
 # overrides/ belongs here and not in the vault. Dependencies are not listed:
-# they are baked into the builder image.
+# they are baked into the image.
 overlay       = ["zensical.toml", "overrides", "src"]
 source_subdir = "docs"
 
 [build]
-kind       = "agent"
-url        = "http://builder:8080"
-token_file = "/run/secrets/build_token"
-command    = ["/etc/ncpages/build.sh"]
-timeout    = "10m"
-output     = "site"
+# The default: run the generator here, as a subprocess. A crash in it is an exit
+# code, not a dead service.
+kind    = "local"
+command = ["/etc/ncpages/build.sh"]
+timeout = "10m"
+output  = "site"
+
+# To isolate the build in its own container instead — no credentials, no egress
+# — run a second container from this same image with `build-agent` and switch to:
+# kind       = "agent"
+# url        = "http://builder:8080"
+# token_file = "/run/secrets/build_token"
 
 # Navigation is generated from front matter, so a new note appears in the menu
 # without anyone editing a config file over SSH.

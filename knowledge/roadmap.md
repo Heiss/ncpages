@@ -48,6 +48,23 @@ Shipped source kinds: `webdav` and `fs`. Shipped publish backend: `symlink`.
 
 The only abstraction v1 needs is **core versus recipe**.
 
+# Options that are designed but not built
+
+**`on_busy = "restart_until_publish"`.** Today a running build is never
+interrupted, because an abort between the swap and `post_publish` leaves a state
+whose irreversible effects half-fired. That reasoning only applies *after* the
+swap, though — up to the gate, nothing has left the machine.
+
+So a safe interrupting policy exists: a new change kills the in-flight build at
+any point before the swap; once the swap begins, the build runs to completion
+including `post_publish`. It would make the service more responsive to bursts.
+
+Whether it is worth building depends on build duration. With a ten second
+debounce and a build of a few seconds, the window it improves is small; at a
+minute per build it is noticeable. The cost is a cancellation path — killing the
+subprocess, cleaning a half-written build tree — and the tests for the race
+around the swap boundary.
+
 # Needs a measurement first
 
 **RFC 6578 collection sync (`sync-token` REPORT).** Nextcloud supports it, and

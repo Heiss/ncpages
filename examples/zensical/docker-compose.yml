@@ -1,33 +1,37 @@
-# A production-shaped deployment: watcher and builder in separate containers,
-# the builder with no route out, Nextcloud reached over a network that survives
-# either stack being restarted.
+# One container: watch, build, gate, publish and serve.
 #
-# Run `make net` once before the first `docker compose up`. Compose cannot
-# express a dependency on a network owned by another stack.
+# The generator runs as a subprocess, so a crash in it is an exit code rather
+# than a dead service, and the HTTP server is a task in the same process. There
+# is no second container to keep in sync, no shared volume between them and no
+# UID to match.
+#
+# If you want the build isolated from the credentials anyway, the README shows
+# the two-container variant — same image, different roles.
+#
+# Run `make net` once before the first `up`: Compose cannot express a dependency
+# on a network owned by another stack.
 
 name: ncpages
 
 services:
-  # Holds the source credential and all network access. Serves the site as well,
-  # unless you split the serve role out (see the README).
-  watcher:
-    # The stock image is Alpine with a shell and CA certificates. Hooks run
-    # here, so if yours need a language runtime or libraries, build your own
-    # from any base and copy the binary in — see ./watcher/Dockerfile — and
-    # replace this line with `build: ./watcher`.
-    image: ghcr.io/heiss/ncpages:main
+  ncpages:
+    build: .
     command: ["run"]
     restart: unless-stopped
     volumes:
+      # Working copy, build tree, releases and state. One volume, because the
+      # build tree and the releases must share a filesystem or publishing
+      # degrades from a rename to a copy.
       - work:/work
+      # Configuration and hooks: root-owned, read-only, and outside the vault.
       - ./etc:/etc/ncpages:ro
       - ./secrets:/run/secrets:ro
     ports:
-      # Your reverse proxy points here. TLS, certificates and DNS are its job.
+      # Your reverse proxy points here. TLS, certificates and DNS stay its job.
       - "8080:8080"
-      # Health, on localhost only: it names the source and the last release.
+      # Health, on localhost only.
       - "127.0.0.1:9090:9090"
-    networks: [cloud-bridge, build]
+    networks: [cloud-bridge]
     security_opt: [no-new-privileges:true]
     healthcheck:
       test: ["CMD", "ncpages", "--config", "/etc/ncpages/ncpages.toml", "check"]
@@ -35,29 +39,7 @@ services:
       timeout: 10s
       retries: 3
 
-  # Build tools, no credentials, no egress. Even if a crafted page made the
-  # generator execute code, it has nowhere to go.
-  builder:
-    build: ./builder
-    command: ["build-agent", "--listen", "0.0.0.0:8080"]
-    restart: unless-stopped
-    volumes:
-      - work:/work
-      - ./etc:/etc/ncpages:ro
-    networks: [build]
-    read_only: true
-    tmpfs:
-      # Python will not run without a writable /tmp.
-      - /tmp
-    cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
-    mem_limit: 2g
-    pids_limit: 512
-
 volumes:
-  # Holds the working copy, the build tree, releases and state. The build tree
-  # and releases must share a filesystem, or publishing degrades from a rename
-  # to a copy — which is why this is one volume and not three.
   work:
 
 networks:
@@ -66,6 +48,3 @@ networks:
   # recreates it with a new ID.
   cloud-bridge:
     external: true
-  # No egress. The builder can be reached from the watcher and from nowhere else.
-  build:
-    internal: true

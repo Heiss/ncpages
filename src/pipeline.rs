@@ -4,6 +4,7 @@
 //! is never in an intermediate state. Step 9 (`post_publish`) runs if and only if
 //! step 8 (the atomic swap) succeeded, because everything in it is irreversible.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -103,8 +104,8 @@ pub async fn run_once(
     .await?;
     outcome.warnings.extend(pre.warnings);
 
-    // 4 — BUILD (isolated)
-    build(&config).await.context("running the build")?;
+    // 4 — BUILD, here as a subprocess or over there in the builder container
+    build(&config, &env).await.context("running the build")?;
 
     let out_dir = config.out_dir();
     if !out_dir.is_dir() {
@@ -227,39 +228,17 @@ fn assemble(config: &Config) -> Result<()> {
     Ok(())
 }
 
-async fn build(config: &Config) -> Result<()> {
+async fn build(config: &Config, env: &BTreeMap<String, String>) -> Result<()> {
     match config.build.kind {
+        // The build is the fourth phase of the same executor, not a mechanism of
+        // its own. `local` and `agent` differ only in *where* it runs.
         BuildKind::Local => {
             let command = config
                 .build
                 .command
                 .as_ref()
                 .expect("validated: build.command is set for kind = local");
-            let (program, args) = command.split_first().expect("validated: non-empty");
-            info!(
-                program,
-                "running local build (development mode; not isolated)"
-            );
-
-            let output = tokio::time::timeout(
-                config.build.timeout,
-                tokio::process::Command::new(program)
-                    .args(args)
-                    .current_dir(&config.paths.build)
-                    .output(),
-            )
-            .await
-            .context("build timed out")?
-            .context("spawning the build command")?;
-
-            if !output.status.success() {
-                bail!(
-                    "build failed with status {}: {}",
-                    output.status,
-                    String::from_utf8_lossy(&output.stderr).trim()
-                );
-            }
-            Ok(())
+            hooks::run_build(command, &config.paths.build, env, config.build.timeout).await
         }
         BuildKind::Agent => {
             let url = format!(

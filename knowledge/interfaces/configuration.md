@@ -174,9 +174,12 @@ output into a release degrades from a rename to a copy. `ncpages doctor` checks 
 **`triggers.poll` stays enabled when `push` is set.** A dropped WebSocket must not
 mean a silently frozen site.
 
-**`build.kind = "local"`** runs the generator in the ncpages process, which holds
-the source credentials and network access. It exists for development; production
-uses `agent`. `doctor` warns whenever it is active.
+**`build.kind` defaults to `"local"`**: the generator runs as a subprocess of the
+same container, so a crash in it is an exit code rather than a dead service, and
+a deployment is one image and one container. `"agent"` moves the build into a
+container with no credentials and no egress — worth it if the vault is shared or
+the generator is large, and unnecessary when the credential is already a
+read-only share token.
 
 **`serve.cache_control_*`**: paths containing `/assets/` get the immutable value,
 everything else the HTML value. Getting this backwards means old HTML referencing

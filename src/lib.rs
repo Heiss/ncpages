@@ -15,6 +15,11 @@
 //! * [`serve`] — serving the current release, and `/healthz`
 //! * [`agent`] — the builder-side build endpoint
 //! * [`doctor`] — the failure catalogue as executable checks
+//!
+//! There is no `unsafe` in this crate, and the attribute below makes adding any
+//! a compile error rather than a review question.
+
+#![forbid(unsafe_code)]
 
 pub mod agent;
 pub mod config;

@@ -140,17 +140,16 @@ pub async fn run(config: Arc<Config>) -> Result<Vec<Check>> {
         Ok(()) => Check::pass(
             "publish/writable",
             format!(
-                "{} is writable by uid {}",
-                config.publish.root.display(),
-                uid()
+                "{} is writable by this process",
+                config.publish.root.display()
             ),
         ),
         Err(e) => Check::fail(
             "publish/writable",
             format!(
-                "{} is not writable by uid {}: {e}. Watcher and builder must share a fixed UID.",
-                config.publish.root.display(),
-                uid()
+                "{} is not writable: {e}. If the build runs in its own container, \
+                 it must use the same fixed UID as this one.",
+                config.publish.root.display()
             ),
         ),
     });
@@ -212,10 +211,11 @@ pub async fn run(config: Arc<Config>) -> Result<Vec<Check>> {
                 config.build.url.as_deref().unwrap_or("?")
             ),
         ),
-        BuildKind::Local => Check::warn(
+        BuildKind::Local => Check::pass(
             "build/isolation",
-            "build.kind = \"local\" runs the generator in this process, with this process's \
-             credentials and network access. Development only.",
+            "builds run here as a subprocess. A generator bug reaches this container's \
+             credentials and network; a read-only share token keeps that blast radius small, \
+             and build.kind = \"agent\" removes it entirely.",
         ),
     });
 
@@ -307,16 +307,6 @@ fn is_executable(path: &Path) -> bool {
     std::fs::metadata(path)
         .map(|m| m.permissions().mode() & 0o111 != 0)
         .unwrap_or(false)
-}
-
-fn uid() -> u32 {
-    // SAFETY: getuid() is always safe to call and cannot fail.
-    unsafe { libc_getuid() }
-}
-
-extern "C" {
-    #[link_name = "getuid"]
-    fn libc_getuid() -> u32;
 }
 
 #[cfg(test)]

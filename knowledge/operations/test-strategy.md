@@ -79,7 +79,10 @@ also costs exactly one request.
   fail. `internal: true` is a claim about a network, and only a real network can
   check it.
 * **The two-container topology works** with a shared volume, one UID, and the
-  symlink resolved inside the serving container.
+  symlink resolved inside the serving container. Note which layer covers which
+  shape: the end-to-end stack runs the *optional* split (`build.kind = "agent"`),
+  because that is the configuration with more to go wrong, while the smoke test
+  exercises the default single-container path with the shipped binary.
 
 # Why not Nextcloud AIO
 

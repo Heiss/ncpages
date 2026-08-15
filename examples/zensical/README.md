@@ -1,27 +1,28 @@
 # Zensical + Obsidian
 
 A production-shaped deployment: an Obsidian vault in Nextcloud, built by
-Zensical, served by ncpages. Watcher and builder are separate containers, and the
-builder has no route to the internet.
+Zensical, served by ncpages. **One container, one Dockerfile.**
 
 This is a template, not a turnkey site. What you bring is your content, your
-generator configuration and your hooks; what this gives you is the topology,
-the isolation and the wiring.
+generator configuration and your hooks; what this gives you is the wiring.
+
+The Dockerfile is the whole customisation mechanism: ncpages ships a statically
+linked binary that imposes nothing on the base image, so you pick the base your
+generator needs and copy the binary in.
 
 ## What lives where
 
 ```
 examples/zensical/
-├── docker-compose.yml     watcher + builder, networks, volumes
+├── Dockerfile             your generator, your hooks, the ncpages binary
+├── pyproject.toml         your build dependencies
+├── uv.lock                pinned; changing a dependency is a rebuild
+├── docker-compose.yml     one service, one volume, one port
 ├── Makefile               make net / up / doctor / build
-├── builder/
-│   ├── Dockerfile         Zensical, baked in from a frozen lockfile
-│   ├── pyproject.toml     your build dependencies
-│   └── uv.lock            pinned; changing a dependency is a rebuild
 ├── etc/                   mounted read-only at /etc/ncpages
 │   ├── ncpages.toml       the service configuration
 │   ├── zensical.toml      generator config, without a nav tree
-│   ├── build.sh           what runs inside the builder
+│   ├── build.sh           what the build phase runs
 │   ├── overrides/         Jinja templates — code, hence not in the vault
 │   └── hooks/             your pre_build / post_build / post_publish scripts
 └── secrets/               one file per secret, git-ignored
@@ -106,26 +107,49 @@ holding page, so *every* page counts as new and the whole backlog goes out at
 once — to other people's servers, irreversibly. Seed it, or make the first run a
 dry run.
 
-## Splitting the serve role
+## If you want more separation
 
-`run` keeps the watcher and the HTTP server in one process, which means a crash
-in the watcher takes the site down with it. To keep the site up regardless, run
-two containers from the same image:
+Everything below is the same image in a different role, added only if you want
+what it buys.
+
+**Isolate the build.** The generator processes vault content, so a bug in it runs
+with whatever the container has. Splitting it out gives the build no credentials
+and no route to the internet:
 
 ```yaml
-watcher:
-  image: ghcr.io/heiss/ncpages:main
-  command: ["watch"]
-
-web:
-  image: ghcr.io/heiss/ncpages:main-serve   # scratch: the binary and nothing else
-  command: ["serve"]
-  volumes: [work:/work, ./etc:/etc/ncpages:ro]
-  ports: ["8080:8080"]
-  # No depends_on, deliberately: the site survives everything else being down.
+  builder:
+    build: .
+    command: ["build-agent", "--listen", "0.0.0.0:8080"]
+    volumes: [work:/work, ./etc:/etc/ncpages:ro]
+    networks: [build]        # internal: true — no egress
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
 ```
 
-The serve image mounts the **parent** of the `current` symlink and resolves it
-per request. Mounting the symlink itself makes Docker bind whatever it pointed at
-during container start, and every later swap becomes invisible: the site silently
-never updates.
+Then set `kind = "agent"` in `ncpages.toml`. Both containers must run the **same
+UID**, or the second build fails with `EACCES` on the releases directory — a
+failure that looks transient and is not. With a read-only share token as the
+credential, the blast radius of a generator bug is already "read that folder",
+which is why this is optional rather than the default.
+
+**Keep the site up when the watcher is not.** `run` hosts the server in the same
+process, so a crash takes the site with it. Two roles instead:
+
+```yaml
+  watcher:
+    build: .
+    command: ["watch"]
+
+  web:
+    image: ghcr.io/heiss/ncpages:main-serve   # scratch: the binary, nothing else
+    command: ["serve"]
+    volumes: [work:/work, ./etc:/etc/ncpages:ro]
+    ports: ["8080:8080"]
+    # No depends_on, deliberately: the site survives everything else being down.
+```
+
+The serve container mounts the **parent** of the `current` symlink and resolves
+it per request. Mounting the symlink itself makes Docker bind whatever it pointed
+at during container start, and every later swap becomes invisible: the site
+silently never updates.

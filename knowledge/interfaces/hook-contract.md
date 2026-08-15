@@ -23,14 +23,35 @@ no dynamically loaded modules — scripts plus environment variables, an interfa
 that still works in five years. See
 [Hooks, not plugins](../decisions/hooks-not-plugins.md).
 
+**One executor, four phases.** The build is not a mechanism of its own: it is a
+program run the same way the hooks are, with the same environment contract and
+the same timeout. What differs between the phases is policy, not machinery.
+
 # Phases
 
-| Phase | Network | Secrets | Runs in | Purpose |
-|---|---|---|---|---|
-| `pre_build` | yes | yes | watcher | generate navigation, fetch external data |
-| `build` | **no** | **no** | builder | run the generator |
-| `post_build` | yes | yes | watcher | post-process HTML, before the gate |
-| `post_publish` | yes | yes | watcher | irreversible effects: webmentions, cache purge |
+| Phase | Purpose | Non-zero exit | Environment |
+|---|---|---|---|
+| `pre_build` | generate navigation, fetch external data | `1` warns, else aborts | cleared |
+| `build` | run the generator | always aborts | inherited |
+| `post_build` | post-process HTML, before the gate | `1` warns, else aborts | cleared |
+| `post_publish` | irreversible effects: webmentions, cache purge | `1` warns, else aborts | cleared |
+
+Two deliberate asymmetries:
+
+**Exit codes.** A generator follows the ordinary Unix convention and knows
+nothing about ours, so for `build` any non-zero exit is a failure. Reading `1` as
+"warning, carry on" there would publish broken output.
+
+**Environment.** Hooks start from a cleared environment — only `PATH`, the
+`NCPAGES_*` contract, and whatever `env_passthrough` names — because they sit
+closest to the secrets. The build inherits the container's environment instead,
+because the image *is* the generator's configuration: `PATH` into a virtualenv,
+`PYTHONPATH` into the assembled tree, and whatever else the recipe baked in.
+
+By default all four run in the same container. `build.kind = "agent"` moves the
+build into an isolated container with no credentials and no egress; that changes
+where it runs, not what it is. See
+[Watcher/builder split](../decisions/watcher-builder-split.md).
 
 The ordering is the point of the whole structure. `post_publish` is the only phase
 allowed to have irreversible outward effect, and it runs only after the gate passed

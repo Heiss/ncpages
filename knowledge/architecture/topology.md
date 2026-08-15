@@ -42,11 +42,17 @@ sources:
 The split between watcher and builder is a security decision, documented in
 [Watcher/builder split](../decisions/watcher-builder-split.md).
 
-> **Serving is in-process by default.** `ncpages run` hosts watcher, scheduler and
-> HTTP server in one process, so the deployed default is *two* containers, not
-> three. The three-container layout above is what `ncpages watch` + `ncpages serve`
-> produce, and it is what buys the property that the site survives a watcher crash
-> — the web role has **no `depends_on`** and depends on nothing. See
+> **The default is one container, not three.** `ncpages run` hosts the watcher,
+> the scheduler and the HTTP server in one process, and `build.kind = "local"`
+> runs the generator as a subprocess of it. The layout above is what you get by
+> opting into both splits:
+>
+> * `ncpages build-agent` in its own container — the build without credentials or
+>   egress; see [Watcher/builder split](../decisions/watcher-builder-split.md),
+> * `ncpages serve` in its own container — the site survives a watcher crash,
+>   because that role has **no `depends_on`** and depends on nothing.
+>
+> Same binary, same image, different roles. See
 > [One binary with roles](../decisions/single-binary-roles.md).
 
 # Network

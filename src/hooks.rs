@@ -1,8 +1,19 @@
-//! Hook runner.
+//! The executor.
 //!
-//! Programs plus environment variables — no plugin API, no dynamically loaded
-//! modules. Exit codes carry meaning: `0` success, `1` warning (the build
-//! continues and the warning is reported), `2` abort.
+//! One way to run a program, used by all four phases: `pre_build`, `build`,
+//! `post_build`, `post_publish`. Programs plus environment variables — no plugin
+//! API, no dynamically loaded modules.
+//!
+//! Two things are deliberately *not* shared, because the phases differ in kind:
+//!
+//! * **Exit codes.** For hooks, `1` is a warning the build survives and `2` is an
+//!   abort. For a build, any non-zero is a failure — generators follow the usual
+//!   Unix convention and know nothing about ours.
+//! * **The environment.** Hooks get a cleared environment plus the documented
+//!   contract, because they sit closest to the secrets. A build inherits the
+//!   container's environment, because the image *is* the generator's
+//!   configuration: `PATH` into a virtualenv, `PYTHONPATH` into the assembled
+//!   tree, and whatever else the recipe baked in.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -16,6 +27,7 @@ use crate::config::Hook;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
     PreBuild,
+    Build,
     PostBuild,
     PostPublish,
 }
@@ -24,6 +36,7 @@ impl Phase {
     pub fn as_str(self) -> &'static str {
         match self {
             Phase::PreBuild => "pre_build",
+            Phase::Build => "build",
             Phase::PostBuild => "post_build",
             Phase::PostPublish => "post_publish",
         }
@@ -33,6 +46,126 @@ impl Phase {
 #[derive(Debug, Default)]
 pub struct HookOutcome {
     pub warnings: Vec<String>,
+}
+
+/// Whether a program starts from a cleared environment or the container's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Env {
+    /// Only `PATH`, the `NCPAGES_*` contract and explicit passthrough. Secrets
+    /// are opt-in, never ambient.
+    Cleared,
+    /// Everything this process has. For the build, whose image was built to
+    /// carry exactly what the generator needs.
+    Inherited,
+}
+
+/// What a program did. Interpreting the code is the caller's job.
+#[derive(Debug)]
+pub struct Execution {
+    pub code: i32,
+    pub stderr: String,
+    pub elapsed: Duration,
+}
+
+/// One program to run, and the policy it runs under.
+pub struct Run<'a> {
+    pub phase: Phase,
+    pub program: &'a Path,
+    pub args: &'a [String],
+    pub workdir: &'a Path,
+    /// The `NCPAGES_*` contract.
+    pub env: &'a BTreeMap<String, String>,
+    /// Variables copied from this process, named explicitly. Secrets are opt-in.
+    pub passthrough: &'a [String],
+    pub env_policy: Env,
+    pub timeout: Duration,
+}
+
+/// Run one program under the pipeline's contract.
+pub async fn execute(run: Run<'_>) -> Result<Execution> {
+    let Run {
+        phase,
+        program,
+        args,
+        workdir,
+        env,
+        passthrough,
+        env_policy,
+        timeout,
+    } = run;
+
+    let mut command = tokio::process::Command::new(program);
+    command.args(args).current_dir(workdir);
+
+    if env_policy == Env::Cleared {
+        command.env_clear().env(
+            "PATH",
+            std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/bin".into()),
+        );
+    }
+    command.envs(env);
+
+    for key in passthrough {
+        if let Ok(value) = std::env::var(key) {
+            command.env(key, value);
+        }
+    }
+
+    let started = std::time::Instant::now();
+    let output = tokio::time::timeout(timeout, command.output())
+        .await
+        .with_context(|| {
+            format!(
+                "{}: {} timed out after {timeout:?}",
+                phase.as_str(),
+                program.display()
+            )
+        })?
+        .with_context(|| format!("{}: running {}", phase.as_str(), program.display()))?;
+
+    Ok(Execution {
+        code: output.status.code().unwrap_or(-1),
+        stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        elapsed: started.elapsed(),
+    })
+}
+
+/// The build phase: one program, and any non-zero exit is a failure.
+pub async fn run_build(
+    command: &[String],
+    workdir: &Path,
+    env: &BTreeMap<String, String>,
+    timeout: Duration,
+) -> Result<()> {
+    let (program, args) = command
+        .split_first()
+        .ok_or_else(|| anyhow::anyhow!("build.command is empty"))?;
+
+    info!(program, "running the build");
+    let execution = execute(Run {
+        phase: Phase::Build,
+        program: Path::new(program),
+        args,
+        workdir,
+        env,
+        passthrough: &[],
+        env_policy: Env::Inherited,
+        timeout,
+    })
+    .await?;
+
+    if execution.code != 0 {
+        bail!(
+            "build failed with exit code {}: {}",
+            execution.code,
+            first_line(&execution.stderr)
+        );
+    }
+    info!(
+        elapsed_ms = execution.elapsed.as_millis() as u64,
+        "build finished"
+    );
+    Ok(())
 }
 
 /// Run every hook of one phase in order.
@@ -61,39 +194,27 @@ pub async fn run_phase(
             );
         }
 
-        let mut command = tokio::process::Command::new(&program);
-        command
-            .args(&hook.args)
-            .current_dir(workdir)
-            .env_clear()
-            .env(
-                "PATH",
-                std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/bin".into()),
-            )
-            .envs(env);
-
-        // Secrets are opt-in per hook, never ambient.
-        for key in &hook.env_passthrough {
-            if let Ok(value) = std::env::var(key) {
-                command.env(key, value);
-            }
-        }
-
         info!(phase = phase.as_str(), hook = %hook.run, "running hook");
-        let started = std::time::Instant::now();
-        let output = tokio::time::timeout(timeout, command.output())
-            .await
-            .with_context(|| format!("{}: hook {} timed out", phase.as_str(), hook.run))?
-            .with_context(|| format!("{}: running hook {}", phase.as_str(), hook.run))?;
+        let execution = execute(Run {
+            phase,
+            program: &program,
+            args: &hook.args,
+            workdir,
+            env,
+            passthrough: &hook.env_passthrough,
+            env_policy: Env::Cleared,
+            timeout,
+        })
+        .await?;
 
-        let code = output.status.code().unwrap_or(-1);
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let code = execution.code;
+        let stderr = execution.stderr.clone();
 
         match code {
             0 => info!(
                 phase = phase.as_str(),
                 hook = %hook.run,
-                elapsed_ms = started.elapsed().as_millis() as u64,
+                elapsed_ms = execution.elapsed.as_millis() as u64,
                 "hook finished"
             ),
             1 => {
