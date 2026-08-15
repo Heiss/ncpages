@@ -82,6 +82,42 @@ touches many files — gives request counts and wall time for both strategies si
 by side. If the flat and idle cases do not improve, this is an optimisation for
 other people's vaults, which is still a reason to do it, just a different one.
 
+**The shape it should take: progressive enhancement.** One binary that detects
+the capability at runtime — `sync-collection` in the collection's
+`supported-report-set` — and uses it when the server offers it. Nextcloud gets
+the fast path, plain WebDAV servers and the `fs` source get the descent, and
+nobody has to choose a build. This is what `obsidian-nextcloudsync` does:
+`NextcloudClient.connect()` reports detected features and falls back to a
+standard WebDAV client otherwise.
+
+## Rejected for now: a compile flag and a second image
+
+The idea: put the descent behind a cargo feature and ship two containers — one
+with both algorithms, one minimal image that speaks only RFC 6578 to Nextcloud.
+Rejected, with the reasons written down because they may not hold forever:
+
+* **The saving is not where the size is.** The descent is roughly a hundred lines
+  of glue over machinery the `REPORT` path needs anyway — the HTTP client, TLS,
+  the multistatus parser, percent-encoding. Removing it would save a fraction of
+  a percent of a 2.42 MB binary. The dependencies are the size, not the
+  algorithm.
+* **The fallback is not optional.** RFC 6578 lets a server invalidate a sync
+  token (`DAV:valid-sync-token`), after which the client *must* do a full
+  synchronisation. That happens on server restarts and routine database
+  maintenance. A REPORT-only build would still need the full-listing path, or it
+  would fail hard on a routine event.
+* **It doubles the test matrix at the worst point.** Every feature combination
+  needs its own build, lint, test and e2e run — and the path most likely to break
+  is the fallback, which is exactly what the minimal build would compile out.
+
+If a flag is ever wanted anyway, the removable half must be the `REPORT`, not the
+descent: a build without `REPORT` is correct everywhere and merely slower, while
+a build without the descent is broken against half the possible setups.
+
+**Revisit when** the binary stops being small enough to ignore, or when the two
+strategies have diverged enough that carrying both is a maintenance cost rather
+than a hundred lines.
+
 # Publication
 
 Not automatic — a tool in someone else's publishing path carries obligations. What

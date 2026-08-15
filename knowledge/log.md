@@ -5,7 +5,9 @@
 * **Update**: [Roadmap](roadmap.md) gained a section for changes that need a
   measurement before they are worth making, starting with RFC 6578 collection
   sync as an alternative to descending by ETag — including the experiment that
-  would settle it.
+  would settle it, progressive enhancement as the shape it should take, and a
+  compile-flag-plus-second-image variant recorded as rejected for now, with the
+  conditions under which to revisit it.
 * **Update**: Public share links are a supported credential —
   `source.share_token` uses `/public.php/dav/files/{token}`, needs no account,
   and is read-only by construction. Documented in
