@@ -43,8 +43,13 @@ ncpages [--config /etc/ncpages/ncpages.toml] <command>
 
 # Logging
 
-`NCPAGES_LOG` takes a `tracing` filter, defaulting to `info`. `NCPAGES_LOG=debug`
-adds per-request and per-file detail.
+`NCPAGES_LOG` takes a level name — `trace`, `debug`, `info` (default), `warn` or
+`error`. `NCPAGES_LOG=debug` adds per-file and per-request detail.
+
+Directive strings like `ncpages::source=debug` are deliberately not supported:
+the regex-based filter that parses them costs about a megabyte of binary, which
+is a poor trade for a service with nine modules. See
+[A small static binary](../decisions/small-static-binary.md).
 
 # Signals
 

@@ -14,6 +14,7 @@ them look reasonable until you know why they fail here.
 # Security
 
 * [Scripts and build config never live in the vault](code-outside-vault.md) - the decision that shaped everything else
+* [The watcher never writes to the source](no-writes-to-the-source.md) - the vault belongs to its author; reports leave another way
 * [Split watcher and builder](watcher-builder-split.md) - credentials and build tools never in the same container
 * [Bake dependencies into the image](baked-dependencies.md) - what makes a network-less builder possible
 
@@ -29,3 +30,4 @@ them look reasonable until you know why they fail here.
 * [Symlink swap as the only publish backend](symlink-swap-publish.md) - atomicity does not exist over a network protocol
 * [A manually created bridge network](external-bridge-network.md) - joining another stack's default network is a trap
 * [The source directory is a working copy, not a cache](source-as-working-copy.md) - Nextcloud as a soft dependency
+* [A small static binary and two images](small-static-binary.md) - what the size choices bought, measured

@@ -74,6 +74,9 @@ anything else.
 
 | Check | Detects |
 |---|---|
-| `report.webdav_status_path` outside `source.path` | infinite build loop |
-| ntfy topic reachable | silent failures |
+| companion app endpoint derived or configured | reports going nowhere unnoticed |
+| ntfy topic configured | silent failures |
 | `/healthz` reachable and current | dead trigger loop |
+
+ncpages never writes to the source, so there is no self-trigger loop left to
+check for.

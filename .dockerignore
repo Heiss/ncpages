@@ -1,0 +1,6 @@
+# The build needs the manifest and the sources. Everything else only makes the
+# context bigger and the cache less effective — target/ alone is gigabytes.
+*
+!Cargo.toml
+!Cargo.lock
+!src

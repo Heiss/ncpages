@@ -1,14 +1,16 @@
 //! Configuration surface: `ncpages.toml`.
 //!
-//! Documented in `knowledge/interfaces/configuration.md`. Two rules here are
-//! load-bearing and enforced in [`Config::validate`] rather than documented and
-//! hoped for:
+//! Documented in `knowledge/interfaces/configuration.md`.
 //!
-//! * the hook directory must not live inside the source working copy, because a
-//!   build is code execution and the vault is writable by anyone the folder is
-//!   shared with,
-//! * the status report path must not live inside the watched remote path, or the
-//!   service triggers itself forever.
+//! Two rules here are load-bearing and enforced in [`Config::validate`] rather
+//! than documented and hoped for: the hook directory must not live inside the
+//! source working copy, because a build is code execution and the vault is
+//! writable by anyone the folder is shared with; and a running build is never
+//! cancelled, because an abort between the swap and `post_publish` leaves a state
+//! with no clean way back.
+//!
+//! There is no configuration for writing to the source, because there is no code
+//! for it. See `knowledge/decisions/no-writes-to-the-source.md`.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -343,14 +345,55 @@ impl Default for Health {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+/// Where build results go.
+///
+/// Never into the source. ncpages treats the watched folder as read-only: a
+/// status file there would sync back into the author's vault, and writing
+/// anything below the watched root changes its ETag, which triggers the next
+/// build. Reports leave through channels of their own.
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Report {
-    /// Status file written back over WebDAV. Must be outside `source.path`.
+    /// Deliver reports to the Nextcloud companion app, if it is installed. The
+    /// app is probed once with `OPTIONS`; when it is absent, nothing is sent and
+    /// nothing is logged beyond a debug line.
+    #[serde(default = "d_true")]
+    pub app: bool,
+    /// Endpoint of the companion app. Derived from `source.url` when unset.
     #[serde(default)]
-    pub webdav_status_path: Option<String>,
+    pub app_url: Option<String>,
+    /// Independent of Nextcloud on purpose: the channel that still works when
+    /// the cloud is the thing that broke.
     #[serde(default)]
     pub ntfy_topic: Option<String>,
+}
+
+impl Default for Report {
+    fn default() -> Self {
+        Self {
+            app: true,
+            app_url: None,
+            ntfy_topic: None,
+        }
+    }
+}
+
+impl Report {
+    /// `https://cloud.example.org` → the app's report endpoint.
+    pub fn endpoint(&self, source_url: Option<&str>) -> Option<String> {
+        if !self.app {
+            return None;
+        }
+        if let Some(url) = &self.app_url {
+            return Some(url.clone());
+        }
+        source_url.map(|url| {
+            format!(
+                "{}/index.php/apps/ncpages/api/v1/reports",
+                url.trim_end_matches('/')
+            )
+        })
+    }
 }
 
 fn d_poll() -> Duration {
@@ -454,20 +497,6 @@ impl Config {
             );
         }
 
-        // Writing the status report inside the watched folder changes the root
-        // ETag, which triggers a build, which writes the status again.
-        if let Some(status) = &self.report.webdav_status_path {
-            if remote_contains(&self.source.path, status) {
-                bail!(
-                    "refusing to start: report.webdav_status_path {:?} is inside source.path {:?}. \
-                     Writing it would change the root ETag and trigger an endless build loop; \
-                     the root ETag is path-blind, so excludes do not help.",
-                    status,
-                    self.source.path
-                );
-            }
-        }
-
         match self.source.kind {
             SourceKind::Webdav => {
                 if self.source.url.is_none() {
@@ -552,16 +581,6 @@ fn normalize(path: &Path) -> PathBuf {
     out
 }
 
-/// Containment for remote (WebDAV) paths, which are plain strings.
-fn remote_contains(outer: &str, inner: &str) -> bool {
-    let outer = outer.trim_matches('/');
-    let inner = inner.trim_matches('/');
-    if outer.is_empty() {
-        return true;
-    }
-    inner == outer || inner.starts_with(&format!("{outer}/"))
-}
-
 /// Environment handed to every hook, per the documented contract.
 pub fn hook_env(
     config: &Config,
@@ -638,20 +657,34 @@ mod tests {
     }
 
     #[test]
-    fn status_path_inside_the_watched_folder_is_refused() {
-        let mut c = base();
-        c.source.path = "Notes/blog".into();
-        c.report.webdav_status_path = Some("Notes/blog/_status/build.md".into());
-        let err = c.validate().unwrap_err().to_string();
-        assert!(err.contains("endless build loop"), "{err}");
+    fn the_report_endpoint_is_derived_from_the_source_when_not_given() {
+        let c = base();
+        assert_eq!(
+            c.report
+                .endpoint(Some("https://cloud.example.org/"))
+                .as_deref(),
+            Some("https://cloud.example.org/index.php/apps/ncpages/api/v1/reports"),
+            "installing the app should be enough; no extra configuration"
+        );
     }
 
     #[test]
-    fn sibling_status_path_is_fine() {
+    fn reporting_to_nextcloud_can_be_switched_off_entirely() {
         let mut c = base();
-        c.source.path = "Notes/blog".into();
-        c.report.webdav_status_path = Some("Notes/_blog-status/build.md".into());
-        assert!(c.validate().is_ok());
+        c.report.app = false;
+        assert_eq!(c.report.endpoint(Some("https://cloud.example.org")), None);
+    }
+
+    #[test]
+    fn an_explicit_endpoint_wins_over_the_derived_one() {
+        let mut c = base();
+        c.report.app_url = Some("http://reports.internal/api".into());
+        assert_eq!(
+            c.report
+                .endpoint(Some("https://cloud.example.org"))
+                .as_deref(),
+            Some("http://reports.internal/api")
+        );
     }
 
     #[test]

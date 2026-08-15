@@ -64,6 +64,18 @@ companies.
 `examples/zensical-obsidian` beside it. Without that separation the project reads
 as one person's blog setup.
 
+**The companion Nextcloud app**, as its own repository and its own entry in the
+Nextcloud app store. It receives the [report payload](interfaces/status-reporting.md)
+and presents it: build history, what changed between releases, conflict copies
+that need attention, possibly request counts from the serving side. Keeping it
+separate is what lets ncpages treat it as absent by default — one `OPTIONS` probe
+and nothing else. Requires a second project, so it comes after v1.
+
+**A share-token source mode.** Nextcloud's public WebDAV endpoint takes a share
+token as the username, which would let someone publish a folder without handing
+over an account credential at all — the smallest possible setup. Not implemented;
+the current WebDAV client speaks `/remote.php/dav/files/{user}` only.
+
 **More recipes.** `quartz` is the highest-value one — it has the largest Obsidian
 publishing community, and "Quartz without git" is exactly the missing piece there.
 Then `hugo` and `mkdocs-material`.

@@ -52,7 +52,8 @@ before touching the code. Start with the overview, then the pipeline.
 * [Configuration](interfaces/configuration.md) — `ncpages.toml`, field by field
 * [Hook contract](interfaces/hook-contract.md) — four phases, environment, exit codes
 * [Quality gate](interfaces/quality-gate.md) — the checks between build and publish
-* [Observability](interfaces/observability.md) — `/healthz`, status file, ntfy
+* [Observability](interfaces/observability.md) — `/healthz`, and what replaces a CI dashboard
+* [Status reporting](interfaces/status-reporting.md) — the companion app and its wire contract
 * [Builder API](interfaces/builder-api.md) — the internal build trigger
 
 # Decisions

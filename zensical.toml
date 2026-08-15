@@ -44,6 +44,7 @@ nav = [
     { "Hook contract" = "interfaces/hook-contract.md" },
     { "Quality gate" = "interfaces/quality-gate.md" },
     { "Observability" = "interfaces/observability.md" },
+    { "Status reporting" = "interfaces/status-reporting.md" },
     { "Builder API" = "interfaces/builder-api.md" },
   ] },
   { "Decisions" = [
@@ -53,6 +54,8 @@ nav = [
     { "Trigger composition" = "decisions/trigger-composition.md" },
     { "queue_latest over cancel" = "decisions/queue-latest-over-cancel.md" },
     { "Code outside the vault" = "decisions/code-outside-vault.md" },
+    { "The watcher never writes to the source" = "decisions/no-writes-to-the-source.md" },
+    { "A small static binary" = "decisions/small-static-binary.md" },
     { "Watcher/builder split" = "decisions/watcher-builder-split.md" },
     { "Baked dependencies" = "decisions/baked-dependencies.md" },
     { "Navigation from frontmatter" = "decisions/navigation-from-frontmatter.md" },

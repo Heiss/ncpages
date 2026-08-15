@@ -65,22 +65,46 @@ Docker socket — mounting that would be equivalent to handing out root on the h
 
 # Layer 3 — credentials are isolated
 
-The builder holds no secrets. Every outward access — WebDAV, comment APIs,
-webmentions — happens in the watcher. This is stricter than the GitHub job it
-replaces, where build and token access shared one context.[^session]
+The builder holds no secrets, and no route to the network. The watcher holds
+exactly one credential — the source password — and makes exactly one kind of
+outward request with it: WebDAV against the watched folder.
 
-# Special case: the self-triggering loop
+**Everything else that reaches outward is a hook script**, and the core knows
+nothing about it. Sending webmentions, fetching comments, purging a CDN: those are
+programs in the config directory, run as child processes with a cleared
+environment plus whatever `env_passthrough` names explicitly. ncpages neither
+knows what they contact nor what their secrets are for. See
+[Hook contract](../interfaces/hook-contract.md).
 
-The status report is written back to Nextcloud. If its path were inside the watched
-folder, writing it would change the root ETag, which triggers a build, which writes
-the status again — forever. Path excludes do not help, because the root ETag is
-path-blind: it changes for *any* descendant.
+This is stricter than the GitHub job it replaces, where the build and every token
+shared one context — but it is worth being precise about where the boundary
+actually runs:
 
-Two mitigations, both required:
+| | Secrets | Network | Runs |
+|---|---|---|---|
+| builder | none | none | the generator |
+| watcher | the source password | WebDAV to the source | the pipeline |
+| hooks | only what is passed in | whatever the watcher's container can reach | recipe-specific work |
 
-1. the status path must be a sibling folder, outside `source.path`;
-2. the watcher keeps a fingerprint of the state it last wrote itself and ignores a
-   change that matches it.
+Hooks are **inside** the watcher's trust zone, not sandboxed from it: a hook can
+reach anything the watcher container can, including Nextcloud. That is precisely
+why hook scripts must live outside the vault — a hook is code, and the vault is
+writable by everyone the folder is shared with.
+
+# The watcher never writes to Nextcloud
+
+The source is read-only to ncpages. It syncs down and nothing goes back up.
+
+The tempting feature is a status file written into the cloud, so build results are
+visible from the same place the content is edited. It is the wrong shape twice
+over. It would sync back into the author's Obsidian vault, putting a machine's
+output into a space that should only ever be touched by its owner. And writing
+anything inside the watched folder changes the root ETag, which triggers a build,
+which writes the status again — forever. Path excludes do not help, because the
+root ETag is path-blind: it changes for *any* descendant.
+
+Status reporting therefore leaves through a channel of its own. See
+[Status reporting](../interfaces/status-reporting.md).
 
 # Supply chain
 

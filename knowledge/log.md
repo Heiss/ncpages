@@ -2,6 +2,24 @@
 
 ## 2026-08-15
 
+* **Update**: The watcher no longer writes to Nextcloud at all.
+  `report.webdav_status_path` is gone from the configuration surface, together
+  with the validation that kept it outside `source.path` and the self-write
+  fingerprint. Recorded as
+  [The watcher never writes to the source](decisions/no-writes-to-the-source.md);
+  the replacement channel is
+  [Status reporting](interfaces/status-reporting.md), a companion Nextcloud app
+  probed with `OPTIONS` and absent by default.
+* **Update**: [Security model](architecture/security-model.md) corrected — the
+  watcher makes exactly one kind of outward request, WebDAV to the source.
+  Webmentions and comment APIs are hook scripts; the core knows nothing about
+  them. The layer-3 section had attributed recipe work to the core.
+* **Creation**: [A small static binary and two images](decisions/small-static-binary.md)
+  — the binary went from 6.7 MB to 2.42 MB, and the runtime image is now Alpine
+  with a static musl build, plus a `scratch` variant for the serve role.
+* **Update**: [Overview](overview.md) gained the three-rung setup ladder:
+  a WebDAV credential, then notify_push, then the companion app.
+
 * **Creation**: [Test strategy](operations/test-strategy.md) — four layers, the
   mock Nextcloud that reproduces ETag propagation rather than stubbing it, and
   why the end-to-end stack uses the plain Nextcloud image instead of AIO.

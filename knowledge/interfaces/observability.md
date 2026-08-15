@@ -39,23 +39,16 @@ If `triggers.timer` is configured, "no build for longer than 2 × the timer
 interval" is a liveness signal — it means the trigger loop itself is stuck, which
 no other check would notice.[^session]
 
-# Status file in Nextcloud
+# Reporting
 
-A markdown file written back over WebDAV after every run, so the state of the site
-is visible from the same place the content is edited — including from a phone.
+Everything beyond the log and `/healthz` leaves through
+[status reporting](status-reporting.md): a companion Nextcloud app when it is
+installed, and ntfy for anything that needs a human.
 
-Contents: trigger, duration, result per phase, gate outcome, hook warnings
-(exit code `1`), orphan pages, conflict copies found, current release id.
-
-**Its path must be outside `source.path`.** See
-[Security model](../architecture/security-model.md) for the loop this prevents, and
-the fingerprint that guards it a second time.
-
-# Push notification
-
-An ntfy topic for failures and gate violations. This is the only channel that
-reaches the operator when they are not looking, which is the normal case for a
-personal blog that publishes fine for months.
+Nothing is written back into the watched folder. An earlier design put a status
+file there; it was dropped, because the vault belongs to its author and is
+mirrored to every device they own. See
+[The watcher never writes to the source](../decisions/no-writes-to-the-source.md).
 
 # What is deliberately absent
 

@@ -76,15 +76,27 @@ pub async fn run(config: Arc<Config>) -> Result<Vec<Check>> {
         ),
     ));
 
-    match &config.report.webdav_status_path {
-        Some(path) => checks.push(Check::pass(
-            "report/loop",
-            format!("status path {path:?} is outside source.path — no self-trigger loop"),
+    checks.push(Check::pass(
+        "source/read-only",
+        "ncpages never writes to the source; the vault is yours alone",
+    ));
+
+    match config.report.endpoint(config.source.url.as_deref()) {
+        Some(endpoint) => checks.push(Check::pass(
+            "report/app",
+            format!("reports go to {endpoint} when the companion app is installed"),
         )),
         None => checks.push(Check::warn(
-            "report/loop",
-            "no report.webdav_status_path configured; failures are only visible in logs and /healthz",
+            "report/app",
+            "companion app reporting is off; results are visible in the log and /healthz",
         )),
+    }
+
+    if config.report.ntfy_topic.is_none() {
+        checks.push(Check::warn(
+            "report/ntfy",
+            "no ntfy topic; a failed build will not reach you unless you look",
+        ));
     }
 
     // Directories

@@ -98,8 +98,9 @@ cache_control_html   = "no-cache"
 listen = "0.0.0.0:9090"
 
 [report]
-webdav_status_path = "Notes/_blog-status/build.md"   # OUTSIDE source.path
-ntfy_topic         = "https://ntfy.sh/…"
+app        = true                         # probe for the companion Nextcloud app
+app_url    = "…/apps/ncpages/api/v1/reports"   # derived from source.url when unset
+ntfy_topic = "https://ntfy.sh/…"
 ```
 
 # Constraints enforced at startup
@@ -110,9 +111,9 @@ These are checked in `Config::validate` and refuse to start rather than warn.
 hook inside the working copy would give a shell to everyone the folder is shared
 with. The same applies to `paths.config_dir`.
 
-**`report.webdav_status_path` must be outside `source.path`.** Otherwise: write
-status → root ETag changes → trigger → build → write status → forever. Path
-excludes do not help, because the root ETag is path-blind.
+**Nothing is ever written to the source.** There is no configuration for it,
+because there is no code for it. See
+[The watcher never writes to the source](../decisions/no-writes-to-the-source.md).
 
 **`schedule.on_busy` accepts only `queue_latest`.** Cancelling a running build can
 leave a published state whose irreversible `post_publish` effects half-fired.
@@ -145,6 +146,10 @@ uses `agent`. `doctor` warns whenever it is active.
 everything else the HTML value. Getting this backwards means old HTML referencing
 asset names that no longer exist.
 
+**`report.app`** costs one `OPTIONS` request per fifteen minutes when the
+companion app is not installed, and nothing otherwise. See
+[Status reporting](status-reporting.md).
+
 **Secrets** are read from files (`*_file`), never inline, and reach hooks only
 through explicit `env_passthrough`. The builder receives none of them.
 
@@ -156,5 +161,6 @@ through explicit `env_passthrough`. The builder receives none of them.
 | `triggers.push` (notify_push), `triggers.poll`, `triggers.timer`, `triggers.jitter`, `schedule` | implemented |
 | `hooks.*` with the four-phase contract | implemented |
 | `report.ntfy_topic` | implemented for failures, gate refusals and conflict copies |
-| `report.webdav_status_path` | **not yet implemented** — validated, not written |
+| `report.app`, `report.app_url` | client side implemented; the companion app itself is a separate project that does not exist yet |
 | `gate.max_nav_churn` | **not implemented**; navigation is a recipe concern, so this may not belong in the core at all |
+| writing anything to the source | **will not be implemented** |

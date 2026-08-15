@@ -155,7 +155,7 @@ pub async fn run(
                 }
 
                 let result = pipeline::run_once(config.clone(), &source, &mut state, current_trigger).await;
-                crate::report::notify(&config, &result).await;
+                crate::report::deliver(&config, &result).await;
 
                 match &result {
                     Ok(outcome) => {

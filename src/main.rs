@@ -13,7 +13,6 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use tracing::info;
-use tracing_subscriber::EnvFilter;
 
 use ncpages::config::Config;
 use ncpages::serve::{Health, SharedHealth};
@@ -57,12 +56,26 @@ enum Command {
     Check,
 }
 
+/// `NCPAGES_LOG` takes a level name. A regex-based directive filter would be
+/// nicer and costs about a megabyte of binary for a service with nine modules.
+fn log_level() -> tracing::Level {
+    match std::env::var("NCPAGES_LOG")
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "trace" => tracing::Level::TRACE,
+        "debug" => tracing::Level::DEBUG,
+        "warn" => tracing::Level::WARN,
+        "error" => tracing::Level::ERROR,
+        _ => tracing::Level::INFO,
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_env("NCPAGES_LOG").unwrap_or_else(|_| EnvFilter::new("info")),
-        )
+        .with_max_level(log_level())
         .with_target(false)
         .init();
 

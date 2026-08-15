@@ -65,6 +65,25 @@ ncpages earns its complexity in five places:
   and search-engine pings fire only after a verified state is actually live.
   See [Hook contract](interfaces/hook-contract.md).
 
+# How much setup do you want?
+
+Each rung is optional, and each one is only worth climbing if the one below it
+annoys you.
+
+| Rung | You configure | You get |
+|---|---|---|
+| 1 | a WebDAV credential | builds on a timer or poll; nothing else to install |
+| 2 | notify_push in Nextcloud | changes go live in about a second |
+| 3 | the companion Nextcloud app | build history and results in a real UI |
+
+Polling and a timer are the same mechanism at different intervals, so rung 1 is
+genuinely the whole product for someone who does not mind waiting a minute.
+Anyone motivated enough to run notify_push can be trusted with an app install,
+and anyone who wants neither still gets the log and `/healthz`.
+
+**Nothing writes back into the vault at any rung.** See
+[The watcher never writes to the source](decisions/no-writes-to-the-source.md).
+
 # Shape of the system
 
 One Rust binary with several roles, and one privilege boundary that is never

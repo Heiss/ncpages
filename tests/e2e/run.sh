@@ -89,7 +89,8 @@ curl -fsS "$SITE/n1.html" | grep -q "n1" || fail "the published page has the wro
 curl -fsS "$HEALTH/healthz" | grep -q '"last_release"' || fail "healthz has no release"
 
 log "the builder has no egress"
-if $COMPOSE exec -T builder curl -sS -m 5 https://example.com >/dev/null 2>&1; then
+# busybox wget: the runtime image ships a shell for hooks, not a download tool.
+if $COMPOSE exec -T builder wget -q -T 5 -O - https://example.com >/dev/null 2>&1; then
   fail "the builder reached the internet; internal: true is not in effect"
 fi
 echo "  confirmed: no route out of the build container"

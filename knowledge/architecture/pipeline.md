@@ -36,7 +36,7 @@ sources:
   7. GATE          required files, page count, nav diff [local]
   8. PUBLISH       current → releases/<id>  rename(2)   [ATOMIC]
   9. post_publish  send webmentions, purge caches       [IRREVERSIBLE]
- 10. REPORT        status to Nextcloud + ntfy, retention
+ 10. REPORT        retention, then report out (never into the source)
 ```
 
 If any step fails, `current` keeps pointing where it pointed before. The site is
@@ -88,8 +88,8 @@ do not publish, keep `current`, report loudly.
 
 **9 · post_publish.** The only phase permitted to have irreversible outward effect.
 
-**10 · REPORT.** Status file written back to Nextcloud plus an ntfy notification,
-then retention. The status path must sit *outside* the watched folder or the
-service triggers itself forever. See [Observability](../interfaces/observability.md).
+**10 · REPORT.** Retention, then the result goes out through channels that do not
+touch the source: the companion app if it is installed, ntfy if something needs a
+human. See [Status reporting](../interfaces/status-reporting.md).
 
 [^session]: Design session, parts 1.6, 2.2 and 3.2.

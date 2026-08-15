@@ -21,7 +21,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 axum = "0.8"
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
 futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
 humantime-serde = "1"
 percent-encoding = "2"
@@ -35,12 +35,15 @@ tokio-tungstenite = "0.29.0"
 toml = "0.8"
 tower-http = { version = "0.6", features = ["fs"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "ansi", "std"] }
 walkdir = "2"
 
 [dev-dependencies]
 tempfile = "3"
 
 [profile.release]
-lto = "thin"
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"   # a panicking task must not leave a half-dead process serving
 strip = true

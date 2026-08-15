@@ -43,6 +43,11 @@ output     = "site"
 [[hooks.post_publish]]
 run = "record.sh"
 
+[report]
+# The companion app is not installed in this stack, so the OPTIONS probe finds
+# nothing and reporting stays in the log. Exercising exactly that is the point.
+app = true
+
 [gate]
 require_files = ["index.html"]
 min_pages     = 2
