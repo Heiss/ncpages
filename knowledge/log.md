@@ -23,6 +23,11 @@
   to the concept that governs it, and the rules for keeping the bundle true. It
   holds links and one-line hooks only; the text stays here.
 
+* **Update**: Multi-arch images are published to GHCR for both targets, and a
+  production-shaped deployment template lives in `examples/zensical/` — compose
+  stack, builder image with dependencies baked in from a frozen lockfile, and the
+  config directory layout. Referenced from
+  [Zensical + Obsidian](recipes/zensical-obsidian.md).
 * **Update**: [Roadmap](roadmap.md) gained a section for changes that need a
   measurement before they are worth making, starting with RFC 6578 collection
   sync as an alternative to descending by ETag — including the experiment that

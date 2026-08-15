@@ -1,0 +1,67 @@
+# A production-shaped deployment: watcher and builder in separate containers,
+# the builder with no route out, Nextcloud reached over a network that survives
+# either stack being restarted.
+#
+# Run `make net` once before the first `docker compose up`. Compose cannot
+# express a dependency on a network owned by another stack.
+
+name: ncpages
+
+services:
+  # Holds the source credential and all network access. Serves the site as well,
+  # unless you split the serve role out (see the README).
+  watcher:
+    image: ghcr.io/heiss/ncpages:main
+    command: ["run"]
+    restart: unless-stopped
+    volumes:
+      - work:/work
+      - ./etc:/etc/ncpages:ro
+      - ./secrets:/run/secrets:ro
+    ports:
+      # Your reverse proxy points here. TLS, certificates and DNS are its job.
+      - "8080:8080"
+      # Health, on localhost only: it names the source and the last release.
+      - "127.0.0.1:9090:9090"
+    networks: [cloud-bridge, build]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "ncpages", "--config", "/etc/ncpages/ncpages.toml", "check"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+  # Build tools, no credentials, no egress. Even if a crafted page made the
+  # generator execute code, it has nowhere to go.
+  builder:
+    build: ./builder
+    command: ["build-agent", "--listen", "0.0.0.0:8080"]
+    restart: unless-stopped
+    volumes:
+      - work:/work
+      - ./etc:/etc/ncpages:ro
+    networks: [build]
+    read_only: true
+    tmpfs:
+      # Python will not run without a writable /tmp.
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 2g
+    pids_limit: 512
+
+volumes:
+  # Holds the working copy, the build tree, releases and state. The build tree
+  # and releases must share a filesystem, or publishing degrades from a rename
+  # to a copy — which is why this is one volume and not three.
+  work:
+
+networks:
+  # Created by `make net`, owned by neither stack. Binding the Nextcloud stack's
+  # default network instead is a trap: `docker compose down` there deletes it and
+  # recreates it with a new ID.
+  cloud-bridge:
+    external: true
+  # No egress. The builder can be reached from the watcher and from nowhere else.
+  build:
+    internal: true

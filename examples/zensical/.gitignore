@@ -1,0 +1,4 @@
+# Real secrets never belong in the repository.
+secrets/*
+!secrets/README.md
+!secrets/*.example

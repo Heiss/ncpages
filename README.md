@@ -20,6 +20,17 @@ supply.
 > [OKF v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
 > bundle. Start at [`knowledge/overview.md`](knowledge/overview.md).
 
+## Running it
+
+```sh
+docker pull ghcr.io/heiss/ncpages:main          # alpine + a shell, for run/watch
+docker pull ghcr.io/heiss/ncpages:main-serve    # scratch, for the serve role
+```
+
+Multi-arch (amd64 and arm64). A production-shaped deployment — watcher and
+builder in separate containers, the builder without egress — is in
+[`examples/zensical/`](examples/zensical/).
+
 ## Try it in one command
 
 ```sh

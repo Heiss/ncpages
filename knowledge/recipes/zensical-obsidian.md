@@ -22,6 +22,13 @@ This is the recipe ncpages was designed against: a personal blog written in
 Obsidian, synced to Nextcloud, built with Zensical, previously published through
 GitHub Actions and git-pages.
 
+A working template lives in
+[`examples/zensical/`](https://github.com/Heiss/ncpages/tree/main/examples/zensical):
+compose stack, builder image with Zensical baked in from a frozen lockfile, the
+config directory layout, and a `Makefile` whose `net` target creates the bridge
+network that Compose cannot express a dependency on. Bring your own content,
+generator config and hooks.
+
 # What the vault contains
 
 Content only:

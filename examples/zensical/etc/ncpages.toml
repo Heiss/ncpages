@@ -1,0 +1,122 @@
+# Production-shaped configuration for the Zensical recipe.
+#
+# This file lives in a directory the operator controls, mounted read-only, and
+# never in the watched folder. A build is code execution: anything reachable
+# from the vault would be a shell for everyone that folder is shared with.
+
+schema_version = 1
+
+[source]
+kind = "webdav"
+
+# The HTTP frontend of your Nextcloud. With an FPM image this is the nginx
+# container — FPM speaks FastCGI, and pointing at it produces errors that look
+# like authentication failures.
+url = "http://nginx"
+
+# The real public domain, sent as Host:, so server_name matching and
+# trusted_domains still apply when the URL above is an internal name.
+host_header = "cloud.example.org"
+
+path = "Notes/blog"
+
+# Either a share link — read-only, scoped to that folder, revocable in one click:
+share_token = "REPLACE_WITH_SHARE_ID"
+# share_password_file = "/run/secrets/share_password"
+
+# … or an account, which grants that user's full rights:
+# user          = "publisher"
+# password_file = "/run/secrets/nc_app_password"
+
+# The working copy is persistent, so an unreachable Nextcloud degrades the
+# service rather than stopping it: the site stays live and timer builds keep
+# running.
+required = false
+
+[paths]
+src        = "/work/src"
+build      = "/work/build"
+state      = "/work/state"
+config_dir = "/etc/ncpages"
+
+[triggers]
+# Roughly a second of latency. An accelerator, never a dependency.
+push = "ws://notify-push:7867/ws"
+# The safety net stays on: a socket that dies quietly must not mean a site that
+# stops updating quietly.
+poll = "30s"
+# Needed by anyone whose build pulls data from outside — incoming comments only
+# appear when a build runs. Remove it if nothing in your hooks reaches outward.
+timer  = "6h"
+jitter = 0.1
+
+[schedule]
+# Obsidian autosaves constantly, and a rename with link updates rewrites dozens
+# of files.
+debounce  = "10s"
+max_delay = "120s"
+on_busy   = "queue_latest"
+
+[assemble]
+# Copied from config_dir into the build tree. Jinja templates are executable, so
+# overrides/ belongs here and not in the vault. Dependencies are not listed:
+# they are baked into the builder image.
+overlay       = ["zensical.toml", "overrides", "src"]
+source_subdir = "docs"
+
+[build]
+kind       = "agent"
+url        = "http://builder:8080"
+token_file = "/run/secrets/build_token"
+command    = ["/etc/ncpages/build.sh"]
+timeout    = "10m"
+output     = "site"
+
+# Navigation is generated from front matter, so a new note appears in the menu
+# without anyone editing a config file over SSH.
+# [[hooks.pre_build]]
+# run = "nav_from_frontmatter.py"
+
+# Fetches comments and annotations and writes them into the built HTML. Runs
+# before the gate, so its output is checked too.
+# [[hooks.post_build]]
+# run = "fetch_comments.py"
+# env_passthrough = ["WEBMENTION_IO_TOKEN"]
+
+# Irreversible: an HTTP request to someone else's server cannot be recalled.
+# Runs only after a verified build is actually live.
+# [[hooks.post_publish]]
+# run = "send_webmentions.sh"
+# env_passthrough = ["WEBMENTION_IO_TOKEN"]
+
+[gate]
+require_files = ["index.html", "sitemap.xml"]
+min_pages     = 5
+# The one that matters: a sync error or an accidental delete on a phone leaves
+# the vault half-empty, the generator builds it happily, and a three-page site
+# replaces the blog. Exit code 0 is not evidence that a build is good.
+max_page_drop = 0.4
+# Wikilinks resolve by basename; duplicates make some links silently wrong.
+forbid_duplicate_basenames = true
+
+[publish]
+root          = "/work/publish"
+# Rollback, and the previous release a webmention diff needs.
+keep_releases = 5
+
+[serve]
+listen = "0.0.0.0:8080"
+# Zensical emits content-hashed asset names, so those are safe forever. HTML is
+# not: cached HTML after a swap references assets that no longer exist.
+cache_control_assets = "public, max-age=31536000, immutable"
+cache_control_html   = "no-cache"
+
+[health]
+listen = "0.0.0.0:9090"
+
+[report]
+# Probed once with OPTIONS. Until the companion app exists, that probe is the
+# entire cost and results stay in the log and /healthz.
+app = true
+# The channel that still works when Nextcloud is the thing that broke.
+# ntfy_topic = "https://ntfy.sh/your-private-topic"

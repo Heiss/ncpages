@@ -1,0 +1,30 @@
+# Generator configuration. Copied into the build tree by `assemble.overlay`.
+#
+# Deliberately without a `nav` tree: Zensical only derives navigation from the
+# directory structure when none is configured, and a hand-written tree would mean
+# a new note stays invisible until someone edits this file over SSH — which is
+# worse than the git workflow this replaces. Generate it from front matter in a
+# pre_build hook instead.
+
+[project]
+site_name = "My Digital Garden"
+site_url  = "https://example.org/"
+docs_dir  = "docs"
+site_dir  = "site"
+
+[project.theme]
+language = "en"
+# Jinja templates are executable code, which is why overrides/ lives here on the
+# config side and not in the vault.
+custom_dir = "overrides"
+features = [
+  "navigation.indexes",
+  "navigation.sections",
+  "search.highlight",
+]
+
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.footnotes]
+[project.markdown_extensions.tables]
+[project.markdown_extensions.toc]
+permalink = true
