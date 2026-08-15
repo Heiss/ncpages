@@ -11,6 +11,10 @@ services:
   # Holds the source credential and all network access. Serves the site as well,
   # unless you split the serve role out (see the README).
   watcher:
+    # The stock image is Alpine with a shell and CA certificates. Hooks run
+    # here, so if yours need a language runtime or libraries, build your own
+    # from any base and copy the binary in — see ./watcher/Dockerfile — and
+    # replace this line with `build: ./watcher`.
     image: ghcr.io/heiss/ncpages:main
     command: ["run"]
     restart: unless-stopped

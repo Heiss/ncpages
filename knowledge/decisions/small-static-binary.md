@@ -64,6 +64,44 @@ the image everyone pulls.
 The `serve` role runs no hooks and needs no certificates, so it gets `scratch` —
 a few megabytes, and nothing to attack that is not the binary itself.
 
+# What the base image has to satisfy
+
+The binary is static, so it imposes nothing: it runs on Alpine, Debian, Ubuntu,
+distroless and `scratch` alike. Only the *other* things in a container decide
+what base is right, and they differ by role:
+
+| Role | Needs from the base | Whose image |
+|---|---|---|
+| `serve` | nothing | ours (`scratch`) |
+| `run`, `watch` | a shell, plus whatever the **hooks** need | ours by default, yours when hooks need more |
+| `build-agent` | whatever the **generator** needs | always the recipe's |
+
+The builder was never a question: a recipe brings its own image anyway, on
+whatever base its generator wants, and takes the binary with one `COPY --from`.
+
+The watcher is the one worth stating, because hooks run there. Shell hooks and
+deployments with no hooks at all are fine on Alpine. A Python hook whose
+dependencies carry C extensions is not: musl means no `manylinux` wheels, so pip
+compiles from source — the same trap that keeps the reference builder on
+`python:3.13-slim` rather than Alpine.
+
+**The answer is not a family of base images.** Shipping `alpine`, `debian` and
+`ubuntu` variants would multiply the build, scan and test matrix, and would still
+be guessing which runtime someone wants preinstalled. Instead the binary is
+portable enough that deriving an image is three lines:
+
+```dockerfile
+FROM python:3.13-slim
+COPY --from=ghcr.io/heiss/ncpages:main /usr/local/bin/ncpages /usr/local/bin/ncpages
+```
+
+One mechanism, used identically for the builder and for a heavier watcher. There
+is a worked example in `examples/zensical/watcher/Dockerfile`.
+
+Two constraints survive into any derived image: the **same UID** as the builder,
+or the second build fails with `EACCES` on the releases directory; and a
+**writable `/tmp`** if the root filesystem is read-only.
+
 # Rejected
 
 * **Distroless as the default.** Same shell problem, plus another registry to

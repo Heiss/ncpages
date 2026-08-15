@@ -75,6 +75,10 @@ an external comment API being down should not take a blog post offline.
 
 * Hooks live in the config directory, outside the vault. A hook directory inside
   `source.path` prevents startup.
+* **Hooks run in the watcher image**, so their interpreter and libraries have to
+  exist there. The stock image is Alpine with a shell; anything heavier means
+  deriving an image on a base of your choice and copying the binary in. See
+  [A small static binary](../decisions/small-static-binary.md).
 * Hooks must be idempotent. `queue_latest` plus timer triggers means a hook may run
   many times on unchanged content.
 * Anything in `post_publish` should be safe to re-run, or must maintain its own
