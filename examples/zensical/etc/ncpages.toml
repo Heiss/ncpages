@@ -20,13 +20,17 @@ host_header = "cloud.example.org"
 
 path = "Notes/blog"
 
-# Either a share link — read-only, scoped to that folder, revocable in one click:
+# Either a share link — read-only, scoped to that folder, revocable in one click.
+# The id is the part after /s/ in the share URL; it is sent as the username, with
+# the share password (if any) as the password.
 share_token = "REPLACE_WITH_SHARE_ID"
-# share_password_file = "/run/secrets/share_password"
+# share_password_file = "/run/secrets/share_password"   # only if the share has one
+# share_password_env  = "NCPAGES_SHARE_PASSWORD"        # or from the environment
 
 # … or an account, which grants that user's full rights:
 # user          = "publisher"
 # password_file = "/run/secrets/nc_app_password"
+# password_env  = "NCPAGES_NC_PASSWORD"
 
 # The working copy is persistent, so an unreachable Nextcloud degrades the
 # service rather than stopping it: the site stays live and timer builds keep

@@ -12,7 +12,7 @@ use std::time::Duration;
 use anyhow::{anyhow, bail, Context, Result};
 use percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, CONTROLS};
 use reqwest::{Method, StatusCode};
-use tracing::warn;
+use tracing::{debug, warn};
 
 use crate::config::{Config, SourceKind};
 use crate::fsutil;
@@ -141,9 +141,13 @@ pub enum Auth {
         user: String,
         password: String,
     },
-    /// Anonymous unless the share is password-protected, in which case Nextcloud
-    /// expects the literal username `anonymous`.
+    /// A share link. Nextcloud's public WebDAV takes the **share id as the
+    /// username** and the share password, empty when the share has none. Newer
+    /// documentation describes the literal user `anonymous` instead, depending on
+    /// version and endpoint, so a 401 on a password-protected share is retried
+    /// that way once.
     Share {
+        token: String,
         password: Option<String>,
     },
 }
@@ -168,6 +172,7 @@ impl Webdav {
             Some(token) => (
                 format!("{url}/public.php/dav/files/{token}"),
                 Auth::Share {
+                    token: token.clone(),
                     password: config.share_password()?,
                 },
             ),
@@ -218,14 +223,21 @@ impl Webdav {
         }
     }
 
-    fn request(&self, method: Method, url: &str) -> reqwest::RequestBuilder {
+    /// `anonymous` selects the alternative credential form for share links.
+    fn request_as(&self, method: Method, url: &str, anonymous: bool) -> reqwest::RequestBuilder {
         let mut builder = self.client.request(method, url);
         builder = match &self.auth {
             Auth::Account { user, password } => builder.basic_auth(user, Some(password)),
-            Auth::Share {
-                password: Some(password),
-            } => builder.basic_auth("anonymous", Some(password)),
-            Auth::Share { password: None } => builder,
+            // The share id is the username. The password is empty when the share
+            // has none, which the public endpoint accepts.
+            Auth::Share { token, password } => {
+                let user = if anonymous {
+                    "anonymous"
+                } else {
+                    token.as_str()
+                };
+                builder.basic_auth(user, Some(password.clone().unwrap_or_default()))
+            }
         };
         // Nextcloud answers 401 to non-GET requests against /public.php/dav
         // without this, unless server-to-server sharing happens to be enabled.
@@ -240,17 +252,45 @@ impl Webdav {
         builder
     }
 
+    /// Send, and on a 401 for a password-protected share try the alternative
+    /// credential form once. Nextcloud's public endpoint has documented both the
+    /// share id and the literal `anonymous` as the username, depending on
+    /// version and endpoint, and guessing wrong looks exactly like a wrong
+    /// password.
+    async fn send<F>(&self, make: F) -> Result<reqwest::Response>
+    where
+        F: Fn(bool) -> reqwest::RequestBuilder,
+    {
+        let response = make(false).send().await?;
+        if response.status() == StatusCode::UNAUTHORIZED && self.share_with_password() {
+            debug!("share credentials rejected; retrying as anonymous");
+            return Ok(make(true).send().await?);
+        }
+        Ok(response)
+    }
+
+    fn share_with_password(&self) -> bool {
+        matches!(
+            &self.auth,
+            Auth::Share {
+                password: Some(_),
+                ..
+            }
+        )
+    }
+
     async fn propfind(&self, rel: &str, depth: u8) -> Result<Vec<Entry>> {
         let url = self.url_for(rel);
         let body = r#"<?xml version="1.0"?>
 <d:propfind xmlns:d="DAV:"><d:prop><d:getetag/><d:resourcetype/></d:prop></d:propfind>"#;
 
         let response = self
-            .request(Method::from_bytes(b"PROPFIND").unwrap(), &url)
-            .header("Depth", depth.to_string())
-            .header(reqwest::header::CONTENT_TYPE, "application/xml")
-            .body(body)
-            .send()
+            .send(|anonymous| {
+                self.request_as(Method::from_bytes(b"PROPFIND").unwrap(), &url, anonymous)
+                    .header("Depth", depth.to_string())
+                    .header(reqwest::header::CONTENT_TYPE, "application/xml")
+                    .body(body)
+            })
             .await
             .with_context(|| format!("PROPFIND {url}"))?;
 
@@ -312,8 +352,7 @@ impl Webdav {
             }
             let url = self.url_for(rel);
             let response = self
-                .request(Method::GET, &url)
-                .send()
+                .send(|anonymous| self.request_as(Method::GET, &url, anonymous))
                 .await
                 .with_context(|| format!("GET {url}"))?;
             check_status(response.status(), &url)?;
@@ -551,7 +590,12 @@ mod tests {
             dav.url_for("note.md"),
             "https://cloud.example.org/public.php/dav/files/abc123XYZ/note.md"
         );
-        assert!(matches!(dav.auth, Auth::Share { password: None }));
+        // The share id is the credential: it is both the path segment and the
+        // username, which is the part that is easy to get wrong.
+        assert!(matches!(
+            &dav.auth,
+            Auth::Share { token, password: None } if token == "abc123XYZ"
+        ));
     }
 
     #[test]

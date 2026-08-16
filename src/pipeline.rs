@@ -238,7 +238,14 @@ async fn build(config: &Config, env: &BTreeMap<String, String>) -> Result<()> {
                 .command
                 .as_ref()
                 .expect("validated: build.command is set for kind = local");
-            hooks::run_build(command, &config.paths.build, env, config.build.timeout).await
+            hooks::run_build(
+                command,
+                &config.paths.build,
+                env,
+                &config.secret_env_names(),
+                config.build.timeout,
+            )
+            .await
         }
         BuildKind::Agent => {
             let url = format!(

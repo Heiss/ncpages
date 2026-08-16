@@ -69,6 +69,10 @@ pub struct Source {
     pub user: Option<String>,
     #[serde(default)]
     pub password_file: Option<PathBuf>,
+    /// Name of an environment variable holding the password. An alternative to
+    /// `password_file`, not an addition.
+    #[serde(default)]
+    pub password_env: Option<String>,
     /// Token of a public share link, used instead of an account. The smallest
     /// possible setup: no account credential leaves Nextcloud, and the share can
     /// be revoked without touching anything else.
@@ -77,6 +81,8 @@ pub struct Source {
     /// Only for a password-protected share.
     #[serde(default)]
     pub share_password_file: Option<PathBuf>,
+    #[serde(default)]
+    pub share_password_env: Option<String>,
     /// Refuse to start when the source is unreachable. Off by default: the
     /// working copy is persistent, so an unreachable source degrades rather
     /// than stops the service.
@@ -197,8 +203,8 @@ impl Default for Assemble {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Build {
-    /// `agent` runs the build in the isolated builder container. `local` runs it
-    /// in this process and exists for development only.
+    /// `local` runs the generator as a subprocess of this container, which is the
+    /// default. `agent` runs it in a container with no credentials and no egress.
     #[serde(default = "d_build_kind")]
     pub kind: BuildKind,
     /// Builder endpoint for `kind = "agent"`.
@@ -206,6 +212,8 @@ pub struct Build {
     pub url: Option<String>,
     #[serde(default)]
     pub token_file: Option<PathBuf>,
+    #[serde(default)]
+    pub token_env: Option<String>,
     /// Command for `kind = "local"`.
     #[serde(default)]
     pub command: Option<Vec<String>>,
@@ -222,6 +230,7 @@ impl Default for Build {
             kind: d_build_kind(),
             url: None,
             token_file: None,
+            token_env: None,
             command: None,
             timeout: d_build_timeout(),
             output: d_output(),
@@ -515,20 +524,44 @@ impl Config {
                 if self.source.url.is_none() {
                     bail!("source.url is required for kind = \"webdav\"");
                 }
-                let account = self.source.user.is_some() || self.source.password_file.is_some();
+                for (file, env, name) in [
+                    (
+                        self.source.password_file.is_some(),
+                        self.source.password_env.is_some(),
+                        "source.password",
+                    ),
+                    (
+                        self.source.share_password_file.is_some(),
+                        self.source.share_password_env.is_some(),
+                        "source.share_password",
+                    ),
+                ] {
+                    if file && env {
+                        bail!("{name}_file and {name}_env are alternatives; give one");
+                    }
+                }
+
+                let account = self.source.user.is_some()
+                    || self.source.password_file.is_some()
+                    || self.source.password_env.is_some();
                 let share = self.source.share_token.is_some();
                 match (account, share) {
-                    (true, true) => bail!(
-                        "source has both an account (user/password_file) and a share_token; pick one"
-                    ),
+                    (true, true) => {
+                        bail!("source has both an account credential and a share_token; pick one")
+                    }
                     (false, false) => bail!(
-                        "kind = \"webdav\" needs either source.user with source.password_file, \
-                         or source.share_token for a public share link"
+                        "kind = \"webdav\" needs either source.user with source.password_file \
+                         or source.password_env, or source.share_token for a public share link"
                     ),
-                    (true, false) if self.source.user.is_none()
-                        || self.source.password_file.is_none() =>
+                    (true, false)
+                        if self.source.user.is_none()
+                            || (self.source.password_file.is_none()
+                                && self.source.password_env.is_none()) =>
                     {
-                        bail!("source.user and source.password_file must be given together")
+                        bail!(
+                            "source.user needs a password: give source.password_file or \
+                             source.password_env"
+                        )
                     }
                     _ => {}
                 }
@@ -558,15 +591,39 @@ impl Config {
 
     /// Secrets are read from files, never taken from inline config values.
     pub fn source_password(&self) -> Result<Option<String>> {
-        read_secret(self.source.password_file.as_deref())
+        read_secret(
+            self.source.password_file.as_deref(),
+            self.source.password_env.as_deref(),
+        )
     }
 
     pub fn share_password(&self) -> Result<Option<String>> {
-        read_secret(self.source.share_password_file.as_deref())
+        read_secret(
+            self.source.share_password_file.as_deref(),
+            self.source.share_password_env.as_deref(),
+        )
     }
 
     pub fn build_token(&self) -> Result<Option<String>> {
-        read_secret(self.build.token_file.as_deref())
+        read_secret(
+            self.build.token_file.as_deref(),
+            self.build.token_env.as_deref(),
+        )
+    }
+
+    /// Environment variables that hold secrets, so the build can be run without
+    /// them: it inherits this process's environment, and a generator has no
+    /// business seeing a Nextcloud password.
+    pub fn secret_env_names(&self) -> Vec<String> {
+        [
+            self.source.password_env.as_deref(),
+            self.source.share_password_env.as_deref(),
+            self.build.token_env.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .map(str::to_string)
+        .collect()
     }
 
     pub fn out_dir(&self) -> PathBuf {
@@ -578,15 +635,21 @@ impl Config {
     }
 }
 
-fn read_secret(path: Option<&Path>) -> Result<Option<String>> {
-    match path {
-        None => Ok(None),
-        Some(path) => {
-            let raw = std::fs::read_to_string(path)
-                .with_context(|| format!("reading secret {}", path.display()))?;
-            Ok(Some(raw.trim().to_string()))
-        }
+/// Secrets come from a file or from the environment, never from the config file
+/// itself. A file is the better default — it does not show up in `docker
+/// inspect` or in a process listing — but an environment variable is what many
+/// container UIs and orchestrators actually offer, so both are supported.
+fn read_secret(path: Option<&Path>, env: Option<&str>) -> Result<Option<String>> {
+    if let Some(path) = path {
+        let raw = std::fs::read_to_string(path)
+            .with_context(|| format!("reading secret {}", path.display()))?;
+        return Ok(Some(raw.trim().to_string()));
     }
+    if let Some(name) = env {
+        let raw = std::env::var(name).with_context(|| format!("reading secret from ${name}"))?;
+        return Ok(Some(raw.trim().to_string()));
+    }
+    Ok(None)
 }
 
 /// Path containment without requiring either path to exist yet.
@@ -768,6 +831,54 @@ mod tests {
         assert_eq!(
             c.source_password().unwrap().as_deref(),
             Some("app-password")
+        );
+    }
+
+    #[test]
+    fn secrets_can_come_from_the_environment() {
+        // Container UIs offer environment variables far more often than they
+        // offer mounted files, so both have to work.
+        std::env::set_var("NCPAGES_TEST_PASSWORD", "  from-the-environment\n");
+        let mut c = base();
+        c.source.password_env = Some("NCPAGES_TEST_PASSWORD".into());
+        assert_eq!(
+            c.source_password().unwrap().as_deref(),
+            Some("from-the-environment"),
+            "whitespace must be trimmed the same way as for files"
+        );
+        std::env::remove_var("NCPAGES_TEST_PASSWORD");
+    }
+
+    #[test]
+    fn a_file_and_an_environment_variable_for_the_same_secret_are_refused() {
+        let mut c = base();
+        c.source.kind = SourceKind::Webdav;
+        c.source.url = Some("http://nginx".into());
+        c.source.user = Some("publisher".into());
+        c.source.password_file = Some(PathBuf::from("/run/secrets/pw"));
+        c.source.password_env = Some("NC_PASSWORD".into());
+        let err = c.validate().unwrap_err().to_string();
+        assert!(err.contains("alternatives"), "{err}");
+    }
+
+    #[test]
+    fn an_account_password_may_come_from_either_place() {
+        let mut c = base();
+        c.source.kind = SourceKind::Webdav;
+        c.source.url = Some("http://nginx".into());
+        c.source.user = Some("publisher".into());
+        c.source.password_env = Some("NC_PASSWORD".into());
+        assert!(c.validate().is_ok(), "an env var is a complete credential");
+    }
+
+    #[test]
+    fn secret_environment_variables_are_named_so_the_build_can_be_denied_them() {
+        let mut c = base();
+        c.source.password_env = Some("NC_PASSWORD".into());
+        c.build.token_env = Some("BUILD_TOKEN".into());
+        assert_eq!(
+            c.secret_env_names(),
+            vec!["NC_PASSWORD".to_string(), "BUILD_TOKEN".to_string()]
         );
     }
 

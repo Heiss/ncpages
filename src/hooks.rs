@@ -77,6 +77,10 @@ pub struct Run<'a> {
     pub env: &'a BTreeMap<String, String>,
     /// Variables copied from this process, named explicitly. Secrets are opt-in.
     pub passthrough: &'a [String],
+    /// Variables removed after the policy is applied. Used to keep secrets out
+    /// of an inherited environment: a generator has no business seeing a
+    /// Nextcloud password.
+    pub deny: &'a [String],
     pub env_policy: Env,
     pub timeout: Duration,
 }
@@ -90,6 +94,7 @@ pub async fn execute(run: Run<'_>) -> Result<Execution> {
         workdir,
         env,
         passthrough,
+        deny,
         env_policy,
         timeout,
     } = run;
@@ -109,6 +114,10 @@ pub async fn execute(run: Run<'_>) -> Result<Execution> {
         if let Ok(value) = std::env::var(key) {
             command.env(key, value);
         }
+    }
+
+    for key in deny {
+        command.env_remove(key);
     }
 
     let started = std::time::Instant::now();
@@ -135,6 +144,7 @@ pub async fn run_build(
     command: &[String],
     workdir: &Path,
     env: &BTreeMap<String, String>,
+    deny_env: &[String],
     timeout: Duration,
 ) -> Result<()> {
     let (program, args) = command
@@ -149,6 +159,7 @@ pub async fn run_build(
         workdir,
         env,
         passthrough: &[],
+        deny: deny_env,
         env_policy: Env::Inherited,
         timeout,
     })
@@ -202,6 +213,7 @@ pub async fn run_phase(
             workdir,
             env,
             passthrough: &hook.env_passthrough,
+            deny: &[],
             env_policy: Env::Cleared,
             timeout,
         })
@@ -347,6 +359,68 @@ mod tests {
         .await;
         std::env::remove_var("NCPAGES_TEST_SECRET");
         assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn the_build_inherits_the_environment_but_never_the_secrets() {
+        // The build needs the container's environment — PATH into a virtualenv,
+        // PYTHONPATH into the assembled tree — but a generator has no business
+        // seeing a Nextcloud password.
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("NCPAGES_TEST_GENERATOR_VAR", "needed");
+        std::env::set_var("NCPAGES_TEST_SECRET_VAR", "secret");
+
+        let script = dir.path().join("build.sh");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\n\
+             test \"$NCPAGES_TEST_GENERATOR_VAR\" = needed || exit 3\n\
+             test -z \"$NCPAGES_TEST_SECRET_VAR\" || exit 4\n",
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+
+        let result = run_build(
+            &[script.display().to_string()],
+            dir.path(),
+            &env(),
+            &["NCPAGES_TEST_SECRET_VAR".to_string()],
+            Duration::from_secs(10),
+        )
+        .await;
+
+        std::env::remove_var("NCPAGES_TEST_GENERATOR_VAR");
+        std::env::remove_var("NCPAGES_TEST_SECRET_VAR");
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn a_build_treats_exit_one_as_a_failure_not_a_warning() {
+        // Generators follow the Unix convention and know nothing about ours.
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("fail.sh");
+        std::fs::write(&script, "#!/bin/sh\necho 'template error' >&2\nexit 1\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+
+        let error = run_build(
+            &[script.display().to_string()],
+            dir.path(),
+            &env(),
+            &[],
+            Duration::from_secs(10),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("template error"), "{error}");
     }
 
     #[tokio::test]

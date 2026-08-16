@@ -23,6 +23,14 @@
   to the concept that governs it, and the rules for keeping the bundle true. It
   holds links and one-line hooks only; the text stays here.
 
+* **Update**: Secrets can come from an environment variable as well as a file
+  (`*_env` beside `*_file`), because container UIs offer variables far more often
+  than mounted files. Since the build inherits the container environment, every
+  variable named as a secret is removed before the generator starts.
+* **Update**: Share links authenticate with the **share id as the username** and
+  the share password as the password — the same Basic request as an account,
+  against a different endpoint. `anonymous` remains as a one-shot retry for the
+  newer documented form; both are covered by tests.
 * **Update**: The build is now the fourth phase of the same executor rather than
   a mechanism of its own, and `build.kind` defaults to `"local"` — one image, one
   container, the generator as a subprocess.

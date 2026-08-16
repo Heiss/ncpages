@@ -147,7 +147,15 @@ them is read.
 | Setup | create a share, copy the id from the URL | create an app password |
 | Revoking | one click on the share | revoke the app password |
 | Requires | Nextcloud 29 or later | any version |
-| Auth | none, or `anonymous` + share password | user + app password |
+| Auth | **share id** as user + share password | user + app password |
+
+**A share link authenticates exactly like an account, with different values.**
+The id at the end of the share URL goes in the *username* field, and the share
+password — if the share has one — in the password field. It is the same Basic
+request, against a different endpoint. Newer Nextcloud documentation describes
+the literal user `anonymous` for that endpoint instead, so a 401 on a
+password-protected share is retried once that way rather than guessed at; both
+forms are covered by tests.
 
 The share link is the smaller blast radius and the smaller setup, and it matches
 what ncpages does: read. An account is the right choice when the folder cannot be
@@ -189,8 +197,30 @@ asset names that no longer exist.
 companion app is not installed, and nothing otherwise. See
 [Status reporting](status-reporting.md).
 
-**Secrets** are read from files (`*_file`), never inline, and reach hooks only
-through explicit `env_passthrough`. The builder receives none of them.
+## Secrets
+
+Never in the config file itself. Every secret comes from one of two places, and
+giving both for the same secret is refused:
+
+| Secret | From a file | From the environment |
+|---|---|---|
+| account password | `source.password_file` | `source.password_env` |
+| share password | `source.share_password_file` | `source.share_password_env` |
+| builder token | `build.token_file` | `build.token_env` |
+
+The `*_env` fields name a variable; ncpages reads it and trims whitespace, the
+same as for a file. Files are the better default — they do not appear in `docker
+inspect` or in a process listing — but environment variables are what most
+container UIs actually offer, which makes them the difference between a setup
+someone completes and one they abandon.
+
+Two protections follow the environment route:
+
+* **Hooks never see them.** Hooks start from a cleared environment; a secret
+  reaches one only if that hook names it in `env_passthrough`.
+* **The build never sees them.** The build inherits the container's environment,
+  so every variable named in a `*_env` field is explicitly removed before the
+  generator starts.
 
 # Implementation status
 

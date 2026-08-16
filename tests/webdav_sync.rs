@@ -212,6 +212,58 @@ async fn a_public_share_link_is_a_complete_credential() {
 }
 
 #[tokio::test]
+async fn a_share_sends_the_share_id_as_the_username() {
+    // The id from the end of the share link goes in the username field and the
+    // share password in the password field — structurally the same request as
+    // an account with an app password, against a different endpoint.
+    let mock = MockNextcloud::start(&[("a.md", "one")]).await;
+    let work = workdir();
+    let config = mock.share_config(work.path());
+    let source = Source::from_config(&config).unwrap();
+
+    source.probe().await.unwrap();
+
+    let request = &mock.requests()[0];
+    assert_eq!(
+        request.basic_user.as_deref(),
+        Some(support::SHARE_TOKEN),
+        "the share id is the username"
+    );
+}
+
+#[tokio::test]
+async fn a_share_falls_back_to_anonymous_when_the_id_is_rejected() {
+    // Newer Nextcloud versions document `anonymous` for the public endpoint.
+    // One retry covers both, instead of a documentation caveat nobody reads.
+    let mock = MockNextcloud::start(&[("a.md", "one"), ("b.md", "two")]).await;
+    mock.set_mode(Mode::AnonymousOnly);
+
+    let work = workdir();
+    let mut config = mock.share_config(work.path());
+    // The fallback only applies to a password-protected share; without a
+    // password there is nothing to retry with.
+    let secret = work.path().join("share-password");
+    std::fs::write(&secret, "hunter2").unwrap();
+    config.source.share_password_file = Some(secret);
+
+    let source = Source::from_config(&config).unwrap();
+    let mut state = State::default();
+    let report = source.sync(&config.paths.src, &mut state).await.unwrap();
+
+    assert_eq!(report.downloaded, 2, "the retry must actually succeed");
+    let users: Vec<_> = mock
+        .requests()
+        .into_iter()
+        .filter_map(|r| r.basic_user)
+        .collect();
+    assert!(
+        users.contains(&support::SHARE_TOKEN.to_string()),
+        "{users:?}"
+    );
+    assert!(users.contains(&"anonymous".to_string()), "{users:?}");
+}
+
+#[tokio::test]
 async fn an_unchanged_share_also_costs_exactly_one_request() {
     let mock = MockNextcloud::start(&[("a.md", "one")]).await;
     let work = workdir();

@@ -43,6 +43,9 @@ pub enum Mode {
     Ok,
     Unauthorized,
     Maintenance,
+    /// Accepts only the literal user `anonymous`, the way newer Nextcloud
+    /// versions document the public endpoint. Anything else gets a 401.
+    AnonymousOnly,
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +55,10 @@ pub struct RecordedRequest {
     pub depth: Option<String>,
     pub host: Option<String>,
     pub authorization: bool,
+    /// Username from the Basic header. For a share link this must be the share
+    /// id — the part that is easy to get wrong and impossible to guess from a
+    /// 401.
+    pub basic_user: Option<String>,
 }
 
 #[derive(Default)]
@@ -215,6 +222,23 @@ impl MockNextcloud {
     }
 }
 
+/// Decode the username out of a Basic authorization header.
+fn basic_user(headers: &HeaderMap) -> Option<String> {
+    use base64::Engine;
+    let raw = headers.get("authorization")?.to_str().ok()?;
+    let encoded = raw.strip_prefix("Basic ")?;
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .ok()?;
+    let text = String::from_utf8(decoded).ok()?;
+    Some(
+        text.split_once(':')
+            .map(|(user, _)| user)
+            .unwrap_or(&text)
+            .to_string(),
+    )
+}
+
 async fn handle(
     State(state): State<AppState>,
     method: Method,
@@ -239,7 +263,14 @@ async fn handle(
                 .and_then(|v| v.to_str().ok())
                 .map(str::to_string),
             authorization: headers.contains_key("authorization"),
+            basic_user: basic_user(&headers),
         });
+
+        if inner.mode == Some(Mode::AnonymousOnly)
+            && basic_user(&headers).as_deref() != Some("anonymous")
+        {
+            return (StatusCode::UNAUTHORIZED, "use anonymous").into_response();
+        }
 
         match inner.mode {
             Some(Mode::Unauthorized) => {

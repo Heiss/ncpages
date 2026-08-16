@@ -26,6 +26,11 @@ services:
       # Configuration and hooks: root-owned, read-only, and outside the vault.
       - ./etc:/etc/ncpages:ro
       - ./secrets:/run/secrets:ro
+    # Secrets can come from files (above) or from the environment — whichever
+    # your host makes easier. ncpages removes these variables before starting the
+    # generator, so a build never sees them.
+    # environment:
+    #   NCPAGES_SHARE_PASSWORD: ${NCPAGES_SHARE_PASSWORD:?set it in .env}
     ports:
       # Your reverse proxy points here. TLS, certificates and DNS stay its job.
       - "8080:8080"
